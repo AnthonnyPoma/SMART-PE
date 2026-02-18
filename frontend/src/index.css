@@ -1,0 +1,11 @@
+/* src/index.css */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: sans-serif;
+  background-color: #f4f6f8; /* Un gris muy suave para fondo de sistema */
+}

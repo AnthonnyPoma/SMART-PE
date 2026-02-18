@@ -1,0 +1,77 @@
+# app/schemas/product_schema.py
+from pydantic import BaseModel
+from typing import Optional, List
+from decimal import Decimal
+from datetime import datetime # Asegúrate de importar esto arriba
+
+# --- ESQUEMAS PARA CATEGORÍAS ---
+class CategoryBase(BaseModel):
+    name: str
+
+class CategoryCreate(CategoryBase):
+    pass
+
+class CategoryResponse(CategoryBase):
+    category_id: int
+    
+    class Config:
+        from_attributes = True # Permite leer datos formato ORM
+
+# --- ESQUEMAS PARA PRODUCTOS ---
+class ProductBase(BaseModel):
+    sku: str
+    name: str
+    description: Optional[str] = None
+    base_price: Decimal
+    min_stock: int = 5
+    category_id: int # El usuario enviará el ID de la categoría (ej: 1 para Celulares)
+    is_serializable: bool = False
+    image_url: Optional[str] = None # 👈 Campo nuevo para la imagen
+
+class ProductCreate(ProductBase):
+    pass # Podríamos agregar validaciones extra aquí si fuera necesario
+
+class ProductResponse(ProductBase):
+    product_id: int
+    category: Optional[CategoryResponse] = None # Para mostrar el nombre de la categoría al responder
+    stock: int = 0
+
+    class Config:
+        from_attributes = True
+
+class StockEntry(BaseModel):
+    product_id: int
+    store_id: int
+    quantity: int
+    unit_cost: float
+    serials: List[str] = []
+    
+    # --- NUEVOS CAMPOS PARA COMPRAS ---
+    supplier_id: int
+    document_type: str   # Ej: "FACTURA", "GUIA"
+    document_number: str # Ej: "F001-2345"
+    notes: Optional[str] = None
+
+class KardexResponse(BaseModel):
+    movement_id: int
+    date: datetime
+    product_name: str
+    sku: str
+    type: str     # "IN" o "OUT"
+    quantity: int
+    unit_cost: Optional[float] = 0.0
+    reason: Optional[str] = None
+    user_name: str
+
+    class Config:
+        from_attributes = True
+    
+# --- ESQUEMA PARA SERIES DE PRODUCTOS (IMEIs) ---
+class ProductSeriesResponse(BaseModel):
+    series_id: int
+    serial_number: str
+    status: str
+    product_id: int
+    
+    class Config:
+        from_attributes = True

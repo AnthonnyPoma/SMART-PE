@@ -1,0 +1,38 @@
+python : Traceback (most recent 
+call last):
+En línea: 1 Carácter: 1
++ python test_cash_flow.py > 
+test_result_manual.log 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : N 
+   otSpecified: (Traceback (mo  
+  st recent call last)::Strin   
+ g) [], RemoteException
+    + FullyQualifiedErrorId : N 
+   ativeCommandError
+ 
+  File "C:\Users\POMA\Desktop\PR
+OYECTOS\SMART_PE\backend\test_ca
+sh_flow.py", line 115, in 
+<module>
+    cleanup_cash()
+  File "C:\Users\POMA\Desktop\PR
+OYECTOS\SMART_PE\backend\test_ca
+sh_flow.py", line 38, in 
+cleanup_cash
+    print("\U0001f9f9 Cajas 
+limpiadas")
+  File "C:\Program Files\Python3
+11\Lib\encodings\cp1252.py", 
+line 19, in encode
+    return codecs.charmap_encode
+(input,self.errors,encoding_tabl
+e)[0]
+           ^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^
+UnicodeEncodeError: 'charmap' 
+codec can't encode character 
+'\U0001f9f9' in position 0: 
+character maps to <undefined>
