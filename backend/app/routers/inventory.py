@@ -119,20 +119,21 @@ def read_products(store_id: Optional[int] = None, db: Session = Depends(get_db),
     
     products = db.query(Product).all()
     
+    # 1. Obtener todos los stocks simples de esta tienda de una sola vez
+    simple_stocks = dict(db.query(Inventory.product_id, func.coalesce(func.sum(Inventory.quantity), 0))
+                         .filter(Inventory.store_id == effective_store_id)
+                         .group_by(Inventory.product_id).all())
+                         
+    # 2. Obtener todos los stocks de series (IMEIs) de esta tienda de una sola vez
+    series_stocks = dict(db.query(ProductSeries.product_id, func.count(ProductSeries.series_id))
+                         .filter(ProductSeries.store_id == effective_store_id, ProductSeries.status == 'disponible')
+                         .group_by(ProductSeries.product_id).all())
+
     for product in products:
         if product.is_serializable:
-            count = db.query(ProductSeries).filter(
-                ProductSeries.product_id == product.product_id,
-                ProductSeries.status == 'disponible',
-                ProductSeries.store_id == effective_store_id
-            ).count()
-            product.stock = count
+            product.stock = series_stocks.get(product.product_id, 0)
         else:
-            total_quantity = db.query(func.sum(Inventory.quantity)).filter(
-                Inventory.product_id == product.product_id,
-                Inventory.store_id == effective_store_id
-            ).scalar()
-            product.stock = total_quantity if total_quantity else 0
+            product.stock = simple_stocks.get(product.product_id, 0)
 
     return products
 
@@ -144,22 +145,23 @@ def read_low_stock_products(store_id: Optional[int] = None, db: Session = Depend
     effective_store_id = store_id if store_id is not None else current_user.store_id
     
     products = db.query(Product).all()
+    
+    simple_stocks = dict(db.query(Inventory.product_id, func.coalesce(func.sum(Inventory.quantity), 0))
+                         .filter(Inventory.store_id == effective_store_id)
+                         .group_by(Inventory.product_id).all())
+                         
+    series_stocks = dict(db.query(ProductSeries.product_id, func.count(ProductSeries.series_id))
+                         .filter(ProductSeries.store_id == effective_store_id, ProductSeries.status == 'disponible')
+                         .group_by(ProductSeries.product_id).all())
+
     low_stock_items = []
     
     for product in products:
         stock = 0
         if product.is_serializable:
-            stock = db.query(ProductSeries).filter(
-                ProductSeries.product_id == product.product_id,
-                ProductSeries.status == 'disponible',
-                ProductSeries.store_id == effective_store_id
-            ).count()
+            stock = series_stocks.get(product.product_id, 0)
         else:
-            total_quantity = db.query(func.sum(Inventory.quantity)).filter(
-                Inventory.product_id == product.product_id,
-                Inventory.store_id == effective_store_id
-            ).scalar()
-            stock = total_quantity if total_quantity else 0
+            stock = simple_stocks.get(product.product_id, 0)
 
         # Validamos alerta
         min_stock = product.min_stock if product.min_stock is not None else 5

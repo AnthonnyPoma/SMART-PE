@@ -87,17 +87,27 @@ def get_dashboard_stats(
 
     # --- 4. GRÁFICO VENTAS 7 DÍAS ---
     chart_data = []
+    start_date_chart = today - timedelta(days=6)
+    
+    daily_sales = db.query(
+        func.date(Sale.date_created), 
+        func.coalesce(func.sum(Sale.total_amount), 0.0)
+    ).filter(
+        func.date(Sale.date_created) >= start_date_chart,
+        func.date(Sale.date_created) <= today,
+        Sale.store_id == effective_store_id
+    ).group_by(func.date(Sale.date_created)).all()
+    
+    # daily_sales items are tuples: (datetime.date(2023, 10, 15), 1500.0)
+    daily_dict = {str(d[0]): float(d[1]) for d in daily_sales}
+
     for i in range(6, -1, -1):
         day = today - timedelta(days=i)
-        
-        daily_total = db.query(func.coalesce(func.sum(Sale.total_amount), 0.0)).filter(
-            func.date(Sale.date_created) == day,
-            Sale.store_id == effective_store_id
-        ).scalar()
+        day_str = str(day)
         
         chart_data.append({
             "name": day.strftime("%d/%m"), 
-            "total": float(daily_total)
+            "total": daily_dict.get(day_str, 0.0)
         })
 
     # --- 5. TOP PRODUCTOS (DE ESTA TIENDA) ---
