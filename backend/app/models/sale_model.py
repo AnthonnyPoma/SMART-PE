@@ -57,6 +57,7 @@ class SaleDetail(Base):
 
     sale = relationship("Sale", back_populates="details")
     product = relationship("Product")
+    series = relationship("ProductSeries")
 
 class SalePayment(Base): # Nueva tabla de pagos
     __tablename__ = "sale_payments"

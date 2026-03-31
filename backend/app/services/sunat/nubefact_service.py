@@ -229,7 +229,7 @@ def emit_to_nubefact(sale, db: Session) -> dict:
         logger.info(f"🚀 [NubeFact] Iniciando → Venta #{sale.sale_id} | Serie {payload['serie']} | Fecha {payload['fecha_de_emision']}")
         logger.debug(f"📦 PAYLOAD #{sale.sale_id}:\n{_json.dumps(payload, ensure_ascii=False, indent=2)}")
 
-        response = requests.post(NUBEFACT_URL, json=payload, headers=headers, timeout=30)
+        response = requests.post(NUBEFACT_URL, json=payload, headers=headers, timeout=10)
         data     = response.json()
         logger.info(f"📨 [NubeFact] Respuesta #{sale.sale_id}: HTTP {response.status_code} | {data}")
 

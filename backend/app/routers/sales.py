@@ -248,8 +248,15 @@ def process_sale(sale_data: SaleCreate, background_tasks: BackgroundTasks, db: S
 def get_sales_history(store_id: Optional[int] = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # Filtro por tienda: Admins pueden override con store_id param
     effective_store_id = store_id if store_id is not None else current_user.store_id
+    from sqlalchemy.orm import joinedload
     sales = db.query(Sale).filter(
         Sale.store_id == effective_store_id
+    ).options(
+        joinedload(Sale.client),
+        joinedload(Sale.user),
+        joinedload(Sale.payments),
+        joinedload(Sale.details).joinedload(SaleDetail.product),
+        joinedload(Sale.details).joinedload(SaleDetail.series)
     ).order_by(Sale.date_created.desc()).all()
     
     history_data = []
@@ -257,40 +264,21 @@ def get_sales_history(store_id: Optional[int] = None, db: Session = Depends(get_
     for sale in sales:
         details_data = []
         for detail in sale.details:
-            product = db.query(Product).filter(Product.product_id == detail.product_id).first()
-            prod_name = product.name if product else "Desconocido"
-            
-            serial_str = None
-            if detail.series_id:
-                 serie_obj = db.query(ProductSeries).filter(ProductSeries.series_id == detail.series_id).first()
-                 serial_str = serie_obj.serial_number if serie_obj else None
-            
             details_data.append({
                 "product_id": detail.product_id,
-                "product_name": prod_name,
+                "product_name": detail.product.name if detail.product else "Desconocido",
                 "quantity": detail.quantity,
                 "unit_price": detail.unit_price,
                 "subtotal": detail.subtotal,
-                "serial_number": serial_str
+                "serial_number": detail.series.serial_number if detail.series else None
             })
-
-        # Recuperar Cliente (CORREGIDO)
-        client_dni = None
-        if sale.client_id:
-            client = db.query(Client).filter(Client.client_id == sale.client_id).first()
-            # ✅ CORRECCIÓN: Usamos document_number
-            if client: client_dni = client.document_number
-
-        payment_method = "Desconocido"
-        if sale.payments: 
-            payment_method = sale.payments[0].method
 
         history_data.append({
             "sale_id": sale.sale_id,
             "date_created": sale.date_created,
             "total_amount": sale.total_amount,
-            "payment_method": payment_method, 
-            "client_dni": client_dni, 
+            "payment_method": sale.payments[0].method if sale.payments else "Desconocido", 
+            "client_dni": sale.client.document_number if sale.client else None, 
             "user_name": sale.user.username if sale.user else "Admin",
             "details": details_data,
             "sunat_status": sale.sunat_status,
@@ -369,43 +357,36 @@ def get_sales_history_paginated(
     total_items = query.count()
     total_pages = math.ceil(total_items / limit) if total_items > 0 else 1
     
-    sales = query.order_by(Sale.date_created.desc()).offset((page - 1) * limit).limit(limit).all()
+    from sqlalchemy.orm import joinedload
+
+    sales = query.options(
+        joinedload(Sale.client),
+        joinedload(Sale.user),
+        joinedload(Sale.payments),
+        joinedload(Sale.details).joinedload(SaleDetail.product),
+        joinedload(Sale.details).joinedload(SaleDetail.series)
+    ).order_by(Sale.date_created.desc()).offset((page - 1) * limit).limit(limit).all()
     
-    # Construir respuesta (misma lógica que el endpoint no paginado)
+    # Construir respuesta extrayendo de la jerarquía ya cargada
     history_data = []
     for sale in sales:
         details_data = []
         for detail in sale.details:
-            product = db.query(Product).filter(Product.product_id == detail.product_id).first()
-            prod_name = product.name if product else "Desconocido"
-            serial_str = None
-            if detail.series_id:
-                serie_obj = db.query(ProductSeries).filter(ProductSeries.series_id == detail.series_id).first()
-                serial_str = serie_obj.serial_number if serie_obj else None
             details_data.append({
                 "product_id": detail.product_id,
-                "product_name": prod_name,
+                "product_name": detail.product.name if detail.product else "Desconocido",
                 "quantity": detail.quantity,
                 "unit_price": detail.unit_price,
                 "subtotal": detail.subtotal,
-                "serial_number": serial_str
+                "serial_number": detail.series.serial_number if detail.series else None
             })
-
-        client_dni = None
-        if sale.client_id:
-            client = db.query(Client).filter(Client.client_id == sale.client_id).first()
-            if client: client_dni = client.document_number
-
-        payment_method_str = "Desconocido"
-        if sale.payments: 
-            payment_method_str = sale.payments[0].method
 
         history_data.append({
             "sale_id": sale.sale_id,
             "date_created": sale.date_created.isoformat() if sale.date_created else None,
             "total_amount": float(sale.total_amount),
-            "payment_method": payment_method_str, 
-            "client_dni": client_dni, 
+            "payment_method": sale.payments[0].method if sale.payments else "Desconocido", 
+            "client_dni": sale.client.document_number if sale.client else None, 
             "user_name": sale.user.username if sale.user else "Admin",
             "details": details_data,
             "sunat_status": sale.sunat_status,

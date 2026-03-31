@@ -49,7 +49,7 @@ function Layout({ children, disablePadding }) {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
-  const { toggleColorMode, mode } = useColorMode();
+  const { mode } = useColorMode();
   const { isCashOpen, openCashModal, modalOpen, modalMode, closeCashModal } = useCash();
 
   // Settings del sistema global
@@ -358,9 +358,6 @@ function Layout({ children, disablePadding }) {
              </Box>
           )}
 
-          <IconButton sx={{ ml: 1 }} onClick={toggleColorMode} color="inherit">
-            {mode === 'dark' ? <Brightness7Icon /> : <Brightness4Icon />}
-          </IconButton>
 
           {/* BOTÓN CONFIGURACIÓN EN APPBAR (Solo Admins) */}
           {isAdmin && (

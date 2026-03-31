@@ -23,11 +23,15 @@ def get_dashboard_stats(
     # Si admin pasa store_id por query param, usarlo. Si no, usar el del token.
     effective_store_id = store_id if store_id is not None else current_user.store_id
     
+    from sqlalchemy.orm import joinedload
+    
     # --- 1. DATOS DE VENTA (HOY) ---
     # Filtrar por tienda
     sales_today = db.query(Sale).filter(
         func.date(Sale.date_created) == today,
         Sale.store_id == effective_store_id
+    ).options(
+        joinedload(Sale.details).joinedload(SaleDetail.series)
     ).all()
     
     total_money_today = sum(float(s.total_amount) for s in sales_today)
@@ -53,10 +57,8 @@ def get_dashboard_stats(
     for sale in sales_today:
         for detail in sale.details:
             cost = 0.0
-            if detail.series_id:
-                serie = db.query(ProductSeries).filter(ProductSeries.series_id == detail.series_id).first()
-                if serie and serie.cost:
-                    cost = float(serie.cost)
+            if detail.series_id and detail.series:
+                cost = float(detail.series.cost) if detail.series.cost else 0.0
             
             if cost == 0:
                 cost = float(detail.unit_price) * 0.8 
