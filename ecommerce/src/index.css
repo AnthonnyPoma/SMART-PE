@@ -1,0 +1,93 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+
+@theme {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --color-primary: #1E3A8A;
+  --color-primary-hover: #1E40AF;
+  --color-accent: #2563EB;
+}
+
+@layer base {
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { 
+    font-family: 'Inter', system-ui, sans-serif; 
+    background: #F8FAFC; 
+    color: #0F172A;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer components {
+  .btn-primary { 
+    @apply bg-blue-700 text-white border-none py-[10px] px-6 rounded-md font-semibold text-sm cursor-pointer transition-all duration-300;
+    font-family: 'Inter', sans-serif; 
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.15);
+  }
+  .btn-primary:hover { 
+    @apply bg-blue-800 shadow-lg transform -translate-y-[1px];
+  }
+  .btn-primary:active {
+    @apply transform translate-y-0 shadow-sm;
+  }
+  
+  .btn-outline {
+    @apply bg-transparent text-blue-700 border border-blue-700 py-[10px] px-6 rounded-md font-semibold text-sm cursor-pointer transition-all duration-300;
+  }
+  .btn-outline:hover {
+    @apply bg-slate-50 border-blue-800 text-blue-800;
+  }
+
+  .tag-badge { 
+    font-family: 'Inter', sans-serif; 
+    font-weight: 700; 
+    font-size: 11px; 
+    letter-spacing: 0.5px; 
+    padding: 3px 8px; 
+    border-radius: 4px; 
+    text-transform: uppercase; 
+  }
+
+  .product-card { 
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+  }
+  .product-card:hover { 
+    transform: translateY(-4px); 
+    box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08), 0 4px 8px rgba(15, 23, 42, 0.03); 
+    border-color: #CBD5E1;
+  }
+  
+  .fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+  
+  input[type=text], input[type=email], input[type=tel], textarea, select { 
+    font-family: 'Inter', sans-serif; 
+    border: 1px solid #CBD5E1; 
+    border-radius: 6px; 
+    padding: 10px 14px; 
+    font-size: 14px; 
+    outline: none; 
+    transition: all 0.2s; 
+    background: #FFFFFF; 
+    color: #0F172A; 
+  }
+  input:focus, textarea:focus, select:focus { 
+    border-color: #2563EB; 
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); 
+  }
+}
+
+@keyframes fadeIn { 
+  from { opacity:0; transform:translateY(8px); } 
+  to { opacity:1; transform:translateY(0); } 
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #94A3B8; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #64748B; }
+
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }

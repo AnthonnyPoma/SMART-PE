@@ -11,7 +11,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import PersonIcon from '@mui/icons-material/Person';
 import BadgeIcon from '@mui/icons-material/Badge';
 import KeyIcon from '@mui/icons-material/Key';
-import api from '../api/axios'; // 👈 USAR CLIENTE SEGURO
+import api from '../api/axios';
 
 function Users() {
   const [users, setUsers] = useState([]);
@@ -31,12 +31,16 @@ function Users() {
     phone: '',
     email: '',
     address: '',
-    is_active: true
+    is_active: true,
+    commission_rate: 0,
+    monthly_goal: 0,
+    supervisor_pin: ''
   });
 
   const fetchUsers = async () => {
     try {
-      const res = await api.get(`/users/`); 
+      const storeId = localStorage.getItem('store_id');
+      const res = await api.get(`/users/`, { params: { store_id: storeId || undefined } }); 
       setUsers(res.data);
     } catch (error) {
       console.error("Error users:", error);
@@ -76,7 +80,10 @@ function Users() {
         phone: user.phone || '',
         email: user.email || '',
         address: user.address || '',
-        is_active: user.is_active
+        is_active: user.is_active !== undefined ? user.is_active : true,
+        commission_rate: user.commission_rate || 0,
+        monthly_goal: user.monthly_goal || 0,
+        supervisor_pin: user.supervisor_pin || ''
       });
     } else {
       setIsEdit(false);
@@ -91,7 +98,9 @@ function Users() {
         phone: '',
         email: '',
         address: '',
-        is_active: true
+        is_active: true,
+        commission_rate: 0,
+        monthly_goal: 0
       });
     }
     setOpen(true);
@@ -231,6 +240,15 @@ function Users() {
                  label={formData.is_active ? "Usuario Activo (Puede ingresar)" : "Usuario Bloqueado (Acceso denegado)"}
                />
             </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField 
+                fullWidth label="PIN de Supervisor (Auditorías)"
+                type="password"
+                value={formData.supervisor_pin}
+                onChange={(e) => setFormData({...formData, supervisor_pin: e.target.value})}
+                helperText="4 dígitos para aprobar anulaciones o cerrar conteos."
+              />
+            </Grid>
 
             {/* DATOS PERSONALES */}
             <Grid item xs={12} sx={{ mt: 2 }}><Typography variant="subtitle2" color="primary">DATOS PERSONALES</Typography></Grid>
@@ -261,6 +279,24 @@ function Users() {
                 fullWidth label="Dirección"
                 value={formData.address}
                 onChange={(e) => setFormData({...formData, address: e.target.value})}
+              />
+            </Grid>
+
+            {/* RRHH */}
+            <Grid item xs={12} sx={{ mt: 2 }}><Typography variant="subtitle2" color="primary">RRHH Y COMISIONES</Typography></Grid>
+            <Grid item xs={12} md={6}>
+              <TextField 
+                fullWidth label="Meta de Venta Mensual (S/)" type="number"
+                value={formData.monthly_goal}
+                onChange={(e) => setFormData({...formData, monthly_goal: parseFloat(e.target.value) || 0})}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField 
+                fullWidth label="Comisión por Venta (%)" type="number"
+                value={formData.commission_rate}
+                onChange={(e) => setFormData({...formData, commission_rate: parseFloat(e.target.value) || 0})}
+                helperText="Ej. 2 para 2%"
               />
             </Grid>
 

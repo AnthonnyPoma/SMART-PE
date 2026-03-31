@@ -4,30 +4,27 @@ from jose import jwt
 from passlib.context import CryptContext
 from app.core.config import settings
 
-# Configuración de Hashing (Bcrypt es el estándar de oro)
+# Hashing con Bcrypt (estándar de la industria)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Configuración del Token
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30 # El token dura 30 mins
+# Lee desde settings (que lee desde .env), con fallback a 480 min (8h) por defecto
+ACCESS_TOKEN_EXPIRE_MINUTES: int = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 
-def verify_password(plain_password, hashed_password):
-    """Verifica si la contraseña escrita coincide con el hash guardado"""
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verifica si la contraseña en texto plano coincide con el hash almacenado."""
     return pwd_context.verify(plain_password, hashed_password)
 
-def get_password_hash(password):
-    """Convierte texto plano a hash seguro"""
+
+def get_password_hash(password: str) -> str:
+    """Convierte texto plano a hash bcrypt seguro."""
     return pwd_context.hash(password)
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """Genera el JWT (JSON Web Token)"""
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """Genera el JWT firmado con la SECRET_KEY del .env."""
     to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({"exp": expire})
-    # Usa la clave secreta de tu .env
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)

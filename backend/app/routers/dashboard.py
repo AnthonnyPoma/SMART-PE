@@ -1,30 +1,33 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, case
 from datetime import datetime, timedelta
+from typing import Optional
 
 from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.sale_model import Sale, SaleDetail
 from app.models.product_model import Product, Inventory, ProductSeries
 from app.models.client_model import Client
-from app.models.user_model import User # 👈 Importante para Top Sellers
+from app.models.user_model import User
 
 router = APIRouter()
 
 @router.get("/stats")
 def get_dashboard_stats(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user) # 👈 Inyectamos usuario para saber su tienda
+    current_user: User = Depends(get_current_user),
+    store_id: Optional[int] = Query(None, description="Override store_id para admins multi-sucursal")
 ):
     today = datetime.now().date()
-    store_id = current_user.store_id
+    # Si admin pasa store_id por query param, usarlo. Si no, usar el del token.
+    effective_store_id = store_id if store_id is not None else current_user.store_id
     
     # --- 1. DATOS DE VENTA (HOY) ---
     # Filtrar por tienda
     sales_today = db.query(Sale).filter(
         func.date(Sale.date_created) == today,
-        Sale.store_id == store_id
+        Sale.store_id == effective_store_id
     ).all()
     
     total_money_today = sum(float(s.total_amount) for s in sales_today)
@@ -34,7 +37,7 @@ def get_dashboard_stats(
     yesterday = today - timedelta(days=1)
     sales_yesterday = db.query(Sale).filter(
         func.date(Sale.date_created) == yesterday,
-        Sale.store_id == store_id
+        Sale.store_id == effective_store_id
     ).all()
     
     total_money_yesterday = sum(float(s.total_amount) for s in sales_yesterday)
@@ -66,7 +69,7 @@ def get_dashboard_stats(
     # PARTE A: Series Disponibles en ESTA TIENDA
     series_value = db.query(func.coalesce(func.sum(ProductSeries.cost), 0.0)).filter(
         ProductSeries.status == 'disponible',
-        ProductSeries.store_id == store_id # 📍 FILTRO
+        ProductSeries.store_id == effective_store_id
     ).scalar()
     
     # PARTE B: Inventario Simple en ESTA TIENDA
@@ -75,7 +78,7 @@ def get_dashboard_stats(
     ).join(Product, Inventory.product_id == Product.product_id)\
      .filter(
          Product.is_serializable == False,
-         Inventory.store_id == store_id # 📍 FILTRO
+         Inventory.store_id == effective_store_id
      ).scalar() or 0.0
 
     inventory_value = float(series_value) + float(simple_products_value)
@@ -87,7 +90,7 @@ def get_dashboard_stats(
         
         daily_total = db.query(func.coalesce(func.sum(Sale.total_amount), 0.0)).filter(
             func.date(Sale.date_created) == day,
-            Sale.store_id == store_id # 📍 FILTRO
+            Sale.store_id == effective_store_id
         ).scalar()
         
         chart_data.append({
@@ -100,7 +103,7 @@ def get_dashboard_stats(
     top_products_query = db.query(Product.name, func.sum(SaleDetail.quantity).label('qty'))\
         .join(SaleDetail, SaleDetail.product_id == Product.product_id)\
         .join(Sale, Sale.sale_id == SaleDetail.sale_id)\
-        .filter(Sale.store_id == store_id)\
+        .filter(Sale.store_id == effective_store_id)\
         .group_by(Product.name).order_by(desc('qty')).limit(5).all()
     
     top_products = [{"name": t[0], "value": t[1]} for t in top_products_query]
@@ -117,7 +120,7 @@ def get_dashboard_stats(
     ).join(Sale, Sale.user_id == User.user_id)\
      .filter(
          func.date(Sale.date_created) == today,
-         Sale.store_id == store_id # 📍 FILTRO
+         Sale.store_id == effective_store_id
      )\
      .group_by(User.username)\
      .order_by(desc('total_sold'))\

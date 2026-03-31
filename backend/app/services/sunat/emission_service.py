@@ -1,90 +1,61 @@
 from sqlalchemy.orm import Session
 from app.core.database import SessionLocal
 from app.models.sale_model import Sale
-from app.models.store_model import Store
-from app.models.client_model import Client
-from app.services.sunat import xml_generator, xml_signer, xml_sender
-from lxml import etree
 import traceback
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def process_sunat_emission(sale_id: int):
     """
-    Procesa la emisión a SUNAT para una venta dada.
-    Esta función está diseñada para correr en background.
+    Worker Background: Procesa la emisión a SUNAT via NubeFact para una venta.
+    Se llama automáticamente en background al crear/anular una venta.
     """
     db = SessionLocal()
     try:
-        print(f"🚀 [Background] Iniciando emisión SUNAT para Venta #{sale_id}...")
-        
-        # 1. Obtener Datos
+        logger.info(f"🚀 [Background] Iniciando emisión SUNAT para Venta #{sale_id}...")
+
         sale = db.query(Sale).filter(Sale.sale_id == sale_id).first()
         if not sale:
-            print(f"❌ [Background] Venta {sale_id} no encontrada.")
+            logger.error(f"❌ [Background] Venta #{sale_id} no encontrada.")
             return
 
-        store = db.query(Store).filter(Store.store_id == sale.store_id).first()
-        client = None
-        if sale.client_id:
-            client = db.query(Client).filter(Client.client_id == sale.client_id).first()
+        # Saltar si ya fue procesada exitosamente
+        if sale.sunat_status == "ACEPTADO":
+            logger.info(f"ℹ️ [Background] Venta #{sale_id} ya tiene estado ACEPTADO. Se omite.")
+            return
 
-        # 2. Generar XML
-        if sale.invoice_type == "NC":
-            # Obtener venta relacionada
-            related_sale = db.query(Sale).filter(Sale.sale_id == sale.related_sale_id).first()
-            if not related_sale:
-                print(f"❌ [Background] Venta relacionada {sale.related_sale_id} no encontrada.")
-                return
-            
-            # Asignar serie/numero si no existen (aunque deberían venir del endpoint)
-            if not sale.invoice_series:
-                sale.invoice_series = "B002" if related_sale.invoice_type == "BOLETA" else "F002"
-            if not sale.invoice_number:
-                sale.invoice_number = str(sale.sale_id).zfill(8)
-                
-            xml_content = xml_generator.generate_credit_note_xml(sale, related_sale, store, client)
-            tipo_doc = "07"
-            
+        # ── Llamar al conector real de NubeFact ──────────────────────────────
+        from app.services.sunat.nubefact_service import emit_to_nubefact
+        result = emit_to_nubefact(sale, db)
+
+        # ── Actualizar la Venta según la respuesta ───────────────────────────
+        if result.get("success"):
+            sale.sunat_status   = "ACEPTADO"
+            sale.invoice_series = result.get("invoice_series", "")
+            sale.invoice_number = result.get("invoice_number", str(sale_id))
+            sale.hash_cpe       = result.get("hash_cpe", "")
+            sale.xml_url        = result.get("enlace_pdf", "")
+            logger.info(f"✅ [Background] Venta #{sale_id} ACEPTADA por SUNAT via NubeFact.")
         else:
-            # Boleta / Factura
-            xml_content = xml_generator.generate_invoice_xml(sale, store, client)
-            tipo_doc = "03" if sale.invoice_type == "BOLETA" else "01"
+            sale.sunat_status = "ERROR_SUNAT"
+            logger.error(
+                f"🚨 [Background] Venta #{sale_id} error NubeFact: {result.get('error_msg')}"
+            )
 
-        # 3. Firmar XML
-        xml_signed = xml_signer.sign_xml(xml_content)
-        
-        # 4. Enviar a SUNAT
-        # Formato nombre: RUC-TIPO-SERIE-NUMERO (20601234567-03-B001-00000123)
-        serie = sale.invoice_series or ("B001" if sale.invoice_type == "BOLETA" else "F001")
-        numero = sale.invoice_number or str(sale.sale_id).zfill(8)
-        
-        filename = f"20601234567-{tipo_doc}-{serie}-{numero}"
-        
-        result = xml_sender.send_bill(filename, xml_signed)
-        
-        # 5. Actualizar Estado
-        if result["success"]:
-            sale.sunat_status = "ACEPTADO"
-            
-            # Extraer Hash CPE (DigestValue) del XML Firmado
-            try:
-                root = etree.fromstring(xml_signed)
-                namespaces = {'ds': 'http://www.w3.org/2000/09/xmldsig#'}
-                digest_value = root.xpath('//ds:DigestValue', namespaces=namespaces)
-                if digest_value:
-                    sale.hash_cpe = digest_value[0].text
-                    print(f"🔑 [Background] Hash CPE extraído: {sale.hash_cpe}")
-            except Exception as e_hash:
-                print(f"⚠️ [Background] No se pudo extraer Hash CPE: {e_hash}")
-
-            print(f"✅ [Background] Venta #{sale_id} ACEPTADA por SUNAT.")
-        else:
-            sale.sunat_status = "RECHAZADO" # O ERROR
-            print(f"\n\n🚨 [FATAL SUNAT ERROR] Venta #{sale_id} RECHAZADA/ERROR:\n{result}\n\n")
-            
         db.commit()
 
     except Exception as e:
-        print(f"❌ [Background] Error crítico en venta #{sale_id}: {str(e)}")
+        logger.error(f"❌ [Background] Error crítico en Venta #{sale_id}: {str(e)}")
         traceback.print_exc()
+        # Marcar como error para que el admin pueda reintentar desde la UI
+        try:
+            sale = db.query(Sale).filter(Sale.sale_id == sale_id).first()
+            if sale and sale.sunat_status not in ("ACEPTADO",):
+                sale.sunat_status = "ERROR_SUNAT"
+                db.commit()
+        except Exception:
+            pass
     finally:
         db.close()

@@ -16,10 +16,15 @@ class SaleCreate(BaseModel):
     # Cliente
     client_dni: Optional[str] = None  
     
-    # Campos de descuento (NUEVO)
+    # Pagos (Tier 3)
+    payment_reference: Optional[str] = None
+    amount_received: Optional[float] = None
+    
+    # Campos de descuento
     discount_type: Optional[str] = None  # PERCENTAGE | FIXED_AMOUNT
     discount_value: Optional[float] = None  # Valor ingresado (% o S/)
     discount_amount: Optional[float] = None  # Monto calculado del descuento
+    promotion_id: Optional[int] = None
     
     # Fidelización
     points_used: Optional[int] = 0
@@ -35,6 +40,7 @@ class SaleResponse(BaseModel):
 
 # --- HISTORIAL (Para la pantalla de reportes) ---
 class SaleDetailHistory(BaseModel):
+    product_id: int
     product_name: str
     quantity: int
     unit_price: float
@@ -51,6 +57,7 @@ class SaleHistoryResponse(BaseModel):
     details: List[SaleDetailHistory]
     sunat_status: Optional[str] = "PENDIENTE"
     invoice_type: Optional[str] = "BOLETA"
+    xml_url: Optional[str] = None
     
     class Config:
         from_attributes = True

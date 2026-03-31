@@ -26,18 +26,11 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
     if not user.is_active:
         raise HTTPException(status_code=401, detail="Usuario inactivo/bloqueado")
 
-    # 3. Obtener Rol (MÉTODO BLINDADO) 🛡️
-    # En lugar de confiar en la relación ORM que puede fallar por imports,
-    # usamos un mapa directo basado en el ID que guardaste en la BD.
-    
-    ROLES_MAP = {
-        1: "admin",       # ID 1 -> admin
-        2: "cajero",      # ID 2 -> cajero
-        3: "almacenero"   # ID 3 -> almacenero
-    }
-    
-    # Si el role_id no está en el mapa, devolvemos 'empleado' por seguridad
-    role_name = ROLES_MAP.get(user.role_id, "empleado")
+    # 3. Obtener Rol (DINÁMICO desde BD) 🛡️
+    # Usa la relación ORM para obtener el nombre real del rol desde la tabla 'roles'
+    role_name = "empleado"  # Fallback seguro
+    if user.role:
+        role_name = user.role.name
 
     # 3.1 Obtener Nombre de Tienda para UI
     store_name = "Sin Asignar"
@@ -62,7 +55,7 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
             "user_id": user.user_id,
             "store_id": user.store_id,
             "store_name": store_name,
-            "full_name": full_name # 📍 NUEVO: Nombre real
+            "full_name": full_name
         },
         expires_delta=access_token_expires
     )

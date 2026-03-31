@@ -12,6 +12,8 @@ import InfoIcon from '@mui/icons-material/Info';
 import api from '../api/axios';
 // import { format } from 'date-fns'; // Removed unused
 
+import { formatCurrency } from '../utils/format';
+import ExportExcelButton from '../components/ExportExcelButton';
 import Layout from '../components/Layout';
 
 export default function CashHistory() {
@@ -30,6 +32,8 @@ export default function CashHistory() {
             if (startDate) params.start_date = startDate.toISOString();
             if (endDate) params.end_date = endDate.toISOString();
             if (userId) params.user_id = userId;
+            const storeId = localStorage.getItem('store_id');
+            if (storeId) params.store_id = storeId;
 
             const response = await api.get('/cash/history', { params });
             setHistory(response.data);
@@ -46,10 +50,6 @@ export default function CashHistory() {
 
     const handleFilter = () => {
         fetchHistory();
-    };
-
-    const formatCurrency = (amount) => {
-        return `S/ ${(amount || 0).toFixed(2)}`;
     };
 
     const formatDate = (dateString) => {
@@ -102,6 +102,26 @@ export default function CashHistory() {
                                 >
                                     Filtrar
                                 </Button>
+                            </Grid>
+                            <Grid item xs={12} sm={2}>
+                                <ExportExcelButton
+                                    data={history}
+                                    filename="historial_cajas"
+                                    sheetName="Cajas"
+                                    columns={[
+                                        { header: 'ID', key: 'cash_id' },
+                                        { header: 'Usuario', key: 'user', transform: (v, row) => v?.username || `User ${row.user_id}` },
+                                        { header: 'Apertura', key: 'start_time', transform: (v) => v ? new Date(v).toLocaleString() : '-' },
+                                        { header: 'Cierre', key: 'end_time', transform: (v) => v ? new Date(v).toLocaleString() : '-' },
+                                        { header: 'Monto Inicial', key: 'start_amount', transform: (v) => Number(v || 0).toFixed(2) },
+                                        { header: 'Esperado', key: 'expected_cash', transform: (v) => v ? Number(v).toFixed(2) : '-' },
+                                        { header: 'Real', key: 'final_amount_real', transform: (v) => v ? Number(v).toFixed(2) : '-' },
+                                        { header: 'Diferencia', key: 'difference', transform: (v) => v != null ? Number(v).toFixed(2) : '-' },
+                                        { header: 'Estado', key: 'status', transform: (v) => v === 'OPEN' ? 'ABIERTA' : 'CERRADA' },
+                                        { header: 'Notas', key: 'notes' },
+                                    ]}
+                                    sx={{ height: 40 }}
+                                />
                             </Grid>
                         </Grid>
                     </Paper>

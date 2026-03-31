@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from pydantic import BaseModel
 from decimal import Decimal
+from sqlalchemy import func
 from datetime import datetime
 
 from app.core.database import get_db
@@ -15,7 +17,7 @@ router = APIRouter()
 
 
 # ==========================================
-# 📦 SCHEMAS
+# Schemas
 # ==========================================
 class PromotionCreate(BaseModel):
     name: str
@@ -53,12 +55,26 @@ class DiscountRequest(BaseModel):
 
 
 class DiscountResponse(BaseModel):
-    """Resultado del cálculo de descuento"""
+    """Resultado del cálculo de descuento manual"""
     original_amount: float
     discount_amount: float
     net_amount: float
     requires_approval: bool
     approved: bool
+
+
+class PromoCodeRequest(BaseModel):
+    code: str
+    cart_total: float
+
+class PromoCodeResponse(BaseModel):
+    valid: bool
+    message: str
+    promotion_id: Optional[int] = None
+    discount_amount: float = 0.0
+    net_total: float = 0.0
+    discount_type: Optional[str] = None
+    value: Optional[float] = None
 
 
 # ==========================================
@@ -94,10 +110,14 @@ def create_promotion(
         valid_until=promo.valid_until,
         created_by=current_user.user_id
     )
-    db.add(new_promo)
-    db.commit()
-    db.refresh(new_promo)
-    return new_promo
+    try:
+        db.add(new_promo)
+        db.commit()
+        db.refresh(new_promo)
+        return new_promo
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="El código de cupón ya existe. Por favor elija uno diferente.")
 
 
 @router.post("/calculate", response_model=DiscountResponse)
@@ -166,3 +186,58 @@ def deactivate_promotion(
     promo.is_active = False
     db.commit()
     return {"message": "Promoción desactivada"}
+
+
+@router.post("/validate_code", response_model=PromoCodeResponse)
+def validate_promo_code(
+    request: PromoCodeRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Valida un código promocional ingresado en el frontend.
+    """
+    code = request.code.strip().upper()
+    cart_total = request.cart_total
+    
+    promo = db.query(Promotion).filter(
+        func.upper(Promotion.code) == code, 
+        Promotion.is_active == True
+    ).first()
+    
+    if not promo:
+        return PromoCodeResponse(valid=False, message="Código inválido o inactivo.", cart_total=cart_total)
+        
+    # Verificar vigencia
+    now = datetime.now()
+    if promo.valid_from and now.replace(tzinfo=promo.valid_from.tzinfo) < promo.valid_from:
+        return PromoCodeResponse(valid=False, message="El código aún no es válido.")
+    if promo.valid_until and now.replace(tzinfo=promo.valid_until.tzinfo) > promo.valid_until:
+        return PromoCodeResponse(valid=False, message="El código ha expirado.")
+        
+    # Verificar monto mínimo
+    if promo.min_purchase and cart_total < float(promo.min_purchase):
+        return PromoCodeResponse(valid=False, message=f"Compra mínima requerida: S/ {promo.min_purchase}")
+        
+    # Calcular descuento
+    if promo.discount_type == "PERCENTAGE":
+        discount_amount = cart_total * (float(promo.value) / 100.0)
+    else:
+        discount_amount = float(promo.value)
+        
+    if promo.max_discount and discount_amount > float(promo.max_discount):
+        discount_amount = float(promo.max_discount)
+        
+    if discount_amount > cart_total:
+        discount_amount = cart_total
+        
+    net_total = cart_total - discount_amount
+    
+    return PromoCodeResponse(
+        valid=True,
+        message="¡Cupón aplicado exitosamente!",
+        promotion_id=promo.promotion_id,
+        discount_amount=round(discount_amount, 2),
+        net_total=round(net_total, 2),
+        discount_type=promo.discount_type,
+        value=float(promo.value)
+    )

@@ -7,9 +7,8 @@ import {
 import api from '../api/axios';
 
 function ProductModal({ open, handleClose, onProductSaved }) {
-  // 1. Agregamos 'sku' al estado inicial
   const [formData, setFormData] = useState({
-    sku: '', // <--- NUEVO CAMPO
+    sku: '',
     name: '',
     description: '',
     base_price: '',
@@ -34,7 +33,7 @@ function ProductModal({ open, handleClose, onProductSaved }) {
 
     try {
       const payload = {
-        sku: formData.sku, // <--- Enviamos el SKU
+        sku: formData.sku,
         name: formData.name,
         description: formData.description,
         base_price: parseFloat(formData.base_price),
@@ -50,7 +49,7 @@ function ProductModal({ open, handleClose, onProductSaved }) {
       
       // Limpiamos el formulario
       setFormData({ 
-        sku: '', // Limpiamos SKU
+        sku: '',
         name: '', 
         description: '', 
         base_price: '', 
@@ -61,7 +60,7 @@ function ProductModal({ open, handleClose, onProductSaved }) {
     } catch (error) {
       console.error("Error creando producto:", error);
       if (error.response && error.response.data) {
-        // Esto nos ayudará a ver errores futuros
+        // Mostrar detalle del error del backend
         alert(`Error: ${JSON.stringify(error.response.data.detail)}`);
       } else {
         alert("Error al guardar el producto");
@@ -75,7 +74,7 @@ function ProductModal({ open, handleClose, onProductSaved }) {
       <DialogContent>
         <Grid container spacing={2} sx={{ mt: 1 }}>
           
-          {/* NUEVO CAMPO DE TEXTO PARA SKU */}
+          {/* Campo SKU */}
           <Grid item xs={12}>
             <TextField 
               label="SKU / Código de Barras" 

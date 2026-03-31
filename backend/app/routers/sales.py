@@ -22,7 +22,8 @@ from app.models.product_model import Product, ProductSeries, Inventory
 from app.models.sale_model import Sale, SaleDetail, SalePayment
 from app.models.user_model import User
 from app.models.client_model import Client
-from app.models.loyalty_model import LoyaltyTransaction # 👈 IMPORTAR
+from app.models.loyalty_model import LoyaltyTransaction
+from app.models.inventory_movement_model import InventoryMovement  # 📜 KARDEX
 
 # Imports Esquemas
 from app.schemas.sale_schema import SaleCreate, SaleResponse, SaleHistoryResponse
@@ -34,7 +35,7 @@ router = APIRouter()
 # ==========================================
 from app.routers.cash import get_active_register
 
-# ... (imports)
+
 
 @router.post("/sales/checkout", response_model=SaleResponse)
 def process_sale(sale_data: SaleCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -66,7 +67,8 @@ def process_sale(sale_data: SaleCreate, background_tasks: BackgroundTasks, db: S
         
         invoice_type='BOLETA', 
         sunat_status='PENDIENTE',
-        points_earned=0
+        points_earned=0,
+        promotion_id=sale_data.promotion_id
     )
     db.add(new_sale)
     db.flush() # Generamos el ID de venta
@@ -133,12 +135,29 @@ def process_sale(sale_data: SaleCreate, background_tasks: BackgroundTasks, db: S
         db.add(detail)
         total_sale += subtotal
 
+        # 📜 E. REGISTRAR EN KARDEX (SALIDA POR VENTA - AGRUPADA)
+        group_identifier = f"SALE_{new_sale.sale_id}_PROD_{item.product_id}"
+        
+        kardex_mov = InventoryMovement(
+            product_id=item.product_id,
+            user_id=current_user.user_id,
+            store_id=sale_data.store_id,
+            series_id=series_linked_id,
+            group_id=group_identifier, # Agrupador para consolidar en el frontend
+            type="SALIDA",
+            reason=f"Venta #{new_sale.sale_id}",
+            quantity=item.quantity, # Esto será 1 para series, pero el endpoint detail sumará todos los del grupo
+            unit_cost=product.average_cost or 0,
+            date=datetime.now()
+        )
+        db.add(kardex_mov)
+
     # 5. Registrar el Pago
     new_payment = SalePayment(
         sale_id=new_sale.sale_id,
         method=sale_data.payment_method,
-        amount=total_sale,
-        reference_code=None
+        amount=total_sale,  # TODO: Podría guardar el received o dejar solo lo cobrado real
+        reference_code=sale_data.payment_reference
     )
     db.add(new_payment)
 
@@ -157,8 +176,18 @@ def process_sale(sale_data: SaleCreate, background_tasks: BackgroundTasks, db: S
              raise HTTPException(status_code=400, detail="Puntos insuficientes.")
     
     net_total = total_sale - descuento_promo - descuento_puntos
+    
+    # 🛡️ VALIDACIÓN PREVENTIVA SUNAT (BACKEND)
+    # SUNAT exige que compras mayores a 700 soles tengan DNI/RUC
+    if net_total > 700 and not client_obj:
+        db.rollback()
+        raise HTTPException(
+            status_code=400, 
+            detail="⚠️ RECHAZO SUNAT PREVENTIVO: Por normativa, toda venta mayor a S/ 700.00 requiere identificar obligatoriamente al cliente con DNI o RUC."
+        )
+
     new_sale.net_amount = net_total
-    new_sale.points_used = sale_data.points_used # 👈 GUARDAR EN BD
+    new_sale.points_used = sale_data.points_used
     
     # Cálculo de Puntos (sobre el neto pagado, 1 punto x S/10)
     # IMPORTANTE: No se ganan puntos sobre la parte pagada con puntos (net_total ya lo excluye)
@@ -216,10 +245,11 @@ def process_sale(sale_data: SaleCreate, background_tasks: BackgroundTasks, db: S
 # 📜 HISTORIAL DE VENTAS
 # ==========================================
 @router.get("/sales/history", response_model=List[SaleHistoryResponse])
-def get_sales_history(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    # 📍 FILTRO TIENDA: Solo ver ventas de mi tienda
+def get_sales_history(store_id: Optional[int] = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Filtro por tienda: Admins pueden override con store_id param
+    effective_store_id = store_id if store_id is not None else current_user.store_id
     sales = db.query(Sale).filter(
-        Sale.store_id == current_user.store_id
+        Sale.store_id == effective_store_id
     ).order_by(Sale.date_created.desc()).all()
     
     history_data = []
@@ -236,6 +266,7 @@ def get_sales_history(db: Session = Depends(get_db), current_user: User = Depend
                  serial_str = serie_obj.serial_number if serie_obj else None
             
             details_data.append({
+                "product_id": detail.product_id,
                 "product_name": prod_name,
                 "quantity": detail.quantity,
                 "unit_price": detail.unit_price,
@@ -263,10 +294,131 @@ def get_sales_history(db: Session = Depends(get_db), current_user: User = Depend
             "user_name": sale.user.username if sale.user else "Admin",
             "details": details_data,
             "sunat_status": sale.sunat_status,
-            "invoice_type": sale.invoice_type
+            "invoice_type": sale.invoice_type,
+            "xml_url": sale.xml_url
         })
         
     return history_data
+
+# ==========================================
+# 📜 HISTORIAL DE VENTAS (PAGINADO)
+# ==========================================
+@router.get("/sales/history-paginated")
+def get_sales_history_paginated(
+    page: int = 1,
+    limit: int = 50,
+    search: Optional[str] = None,
+    payment_method: Optional[str] = None,
+    user_name: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    store_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Historial de ventas con paginación y filtros del lado del servidor."""
+    import math
+    from sqlalchemy import or_, cast, String
+    from datetime import datetime as dt
+    
+    effective_store_id = store_id if store_id is not None else current_user.store_id
+    
+    query = db.query(Sale).filter(Sale.store_id == effective_store_id)
+    
+    # Filtro por búsqueda (ticket # o DNI cliente)
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                cast(Sale.sale_id, String).ilike(search_term),
+                Sale.client_id.in_(
+                    db.query(Client.client_id).filter(Client.document_number.ilike(search_term))
+                )
+            )
+        )
+    
+    # Filtro por método de pago
+    if payment_method and payment_method != "TODOS":
+        from app.models.sale_model import SalePayment
+        sale_ids_with_method = db.query(SalePayment.sale_id).filter(
+            SalePayment.method == payment_method
+        ).distinct()
+        query = query.filter(Sale.sale_id.in_(sale_ids_with_method))
+    
+    # Filtro por usuario/cajero
+    if user_name and user_name != "TODOS":
+        user_ids = db.query(User.user_id).filter(User.username == user_name)
+        query = query.filter(Sale.user_id.in_(user_ids))
+    
+    # Filtro por rango de fechas
+    if start_date:
+        try:
+            sd = dt.strptime(start_date, "%Y-%m-%d")
+            query = query.filter(Sale.date_created >= sd)
+        except ValueError:
+            pass
+    if end_date:
+        try:
+            ed = dt.strptime(end_date, "%Y-%m-%d")
+            ed = ed.replace(hour=23, minute=59, second=59)
+            query = query.filter(Sale.date_created <= ed)
+        except ValueError:
+            pass
+    
+    # Contar total y paginar
+    total_items = query.count()
+    total_pages = math.ceil(total_items / limit) if total_items > 0 else 1
+    
+    sales = query.order_by(Sale.date_created.desc()).offset((page - 1) * limit).limit(limit).all()
+    
+    # Construir respuesta (misma lógica que el endpoint no paginado)
+    history_data = []
+    for sale in sales:
+        details_data = []
+        for detail in sale.details:
+            product = db.query(Product).filter(Product.product_id == detail.product_id).first()
+            prod_name = product.name if product else "Desconocido"
+            serial_str = None
+            if detail.series_id:
+                serie_obj = db.query(ProductSeries).filter(ProductSeries.series_id == detail.series_id).first()
+                serial_str = serie_obj.serial_number if serie_obj else None
+            details_data.append({
+                "product_id": detail.product_id,
+                "product_name": prod_name,
+                "quantity": detail.quantity,
+                "unit_price": detail.unit_price,
+                "subtotal": detail.subtotal,
+                "serial_number": serial_str
+            })
+
+        client_dni = None
+        if sale.client_id:
+            client = db.query(Client).filter(Client.client_id == sale.client_id).first()
+            if client: client_dni = client.document_number
+
+        payment_method_str = "Desconocido"
+        if sale.payments: 
+            payment_method_str = sale.payments[0].method
+
+        history_data.append({
+            "sale_id": sale.sale_id,
+            "date_created": sale.date_created.isoformat() if sale.date_created else None,
+            "total_amount": float(sale.total_amount),
+            "payment_method": payment_method_str, 
+            "client_dni": client_dni, 
+            "user_name": sale.user.username if sale.user else "Admin",
+            "details": details_data,
+            "sunat_status": sale.sunat_status,
+            "invoice_type": sale.invoice_type,
+            "xml_url": sale.xml_url
+        })
+    
+    return {
+        "data": history_data,
+        "page": page,
+        "total_pages": total_pages,
+        "total_items": total_items
+    }
 
 # ==========================================
 # 🚫 ANULAR VENTA (NOTA DE CRÉDITO)
@@ -316,7 +468,7 @@ def void_sale(sale_id: int, void_data: VoidSaleRequest, background_tasks: Backgr
              points_to_revert = original_sale.points_earned
              client.current_points = max(0, client.current_points - points_to_revert)
              
-             # 🆕 REGISTRAR REVERSIÓN DE PUNTOS
+             # Registrar reversión de puntos
              loyalty_revert = LoyaltyTransaction(
                  client_id=client.client_id,
                  points=-points_to_revert, # Negativo para restar
@@ -334,7 +486,7 @@ def void_sale(sale_id: int, void_data: VoidSaleRequest, background_tasks: Backgr
              points_to_refund = original_sale.points_used
              client.current_points = (client.current_points or 0) + points_to_refund
              
-             # 🆕 REGISTRAR DEVOLUCIÓN (REFUND)
+             # Registrar devolución (refund)
              loyalty_refund = LoyaltyTransaction(
                  client_id=client.client_id,
                  points=points_to_refund, # Positivo para devolver
@@ -346,6 +498,45 @@ def void_sale(sale_id: int, void_data: VoidSaleRequest, background_tasks: Backgr
              db.add(loyalty_refund)
 
     db.add(new_nc)
+    db.flush()  # Para obtener el ID de la NC
+
+    # 4.2 📜 REVERTIR STOCK Y REGISTRAR EN KARDEX (DEVOLUCIÓN)
+    for detail in original_sale.details:
+        product = db.query(Product).filter(Product.product_id == detail.product_id).first()
+        if not product:
+            continue
+
+        # Devolver serie si es serializable
+        if detail.series_id:
+            serie_obj = db.query(ProductSeries).filter(ProductSeries.series_id == detail.series_id).first()
+            if serie_obj:
+                serie_obj.status = "disponible"
+        else:
+            # Devolver stock general
+            inventory_item = db.query(Inventory).filter(
+                Inventory.product_id == detail.product_id,
+                Inventory.store_id == original_sale.store_id
+            ).first()
+            if inventory_item:
+                inventory_item.quantity += detail.quantity
+
+        # Registrar ENTRADA en Kardex (AGRUPADA)
+        group_identifier = f"VOID_{new_nc.sale_id}_PROD_{detail.product_id}"
+        
+        kardex_rev = InventoryMovement(
+            product_id=detail.product_id,
+            user_id=current_user.user_id,
+            store_id=original_sale.store_id,
+            series_id=detail.series_id,
+            group_id=group_identifier,
+            type="ENTRADA",
+            reason=f"Anulación Venta #{original_sale.sale_id} (NC #{new_nc.sale_id})",
+            quantity=detail.quantity,
+            unit_cost=product.average_cost or 0,
+            date=datetime.now()
+        )
+        db.add(kardex_rev)
+
     db.commit()
     db.refresh(new_nc)
     
@@ -356,6 +547,37 @@ def void_sale(sale_id: int, void_data: VoidSaleRequest, background_tasks: Backgr
 
 
 # ==========================================
+# 🌐 EMITIR MANUALMENTE A SUNAT (REINTENTO)
+# ==========================================
+@router.post("/sales/{sale_id}/emit_sunat")
+def emit_sale_to_sunat(sale_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Permite al administrador reintentar la emisión de un comprobante a SUNAT
+    cuando falló por falta de internet, error del servidor NubeFact o similares.
+    Solo aplica para ventas en estado PENDIENTE o ERROR_SUNAT.
+    """
+    sale = db.query(Sale).filter(Sale.sale_id == sale_id).first()
+    if not sale:
+        raise HTTPException(status_code=404, detail="Venta no encontrada")
+
+    # 🔒 Solo puede reintentar ventas de su propia tienda
+    if sale.store_id != current_user.store_id and current_user.role not in ("admin", "superadmin"):
+        raise HTTPException(status_code=403, detail="No tienes permiso para esta operación.")
+
+    if sale.sunat_status == "ACEPTADO":
+        raise HTTPException(status_code=400, detail="Esta venta ya fue aceptada por SUNAT. No se puede re-emitir.")
+
+    # Resetear estado a PENDIENTE antes de reintentar
+    sale.sunat_status = "PENDIENTE"
+    db.commit()
+
+    # Disparar en background para no bloquear la UI
+    background_tasks.add_task(process_sunat_emission, sale_id)
+
+    return {"message": f"Re-emisión a SUNAT iniciada para Venta #{sale_id}", "status": "PENDIENTE"}
+
+
+# ==========================================
 # 🖨️ GENERAR TICKET "PRECISIÓN MILIMÉTRICA"
 # ==========================================
 @router.get("/sales/{sale_id}/ticket")
@@ -363,6 +585,10 @@ def generate_ticket_pdf(sale_id: int, db: Session = Depends(get_db)):
     sale = db.query(Sale).filter(Sale.sale_id == sale_id).first()
     if not sale:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
+
+    # Helper: formato de moneda con separador de miles
+    def fmt(amount):
+        return f"{amount:,.2f}"
 
     # Configuración Física
     width = 80 * mm
@@ -389,11 +615,21 @@ def generate_ticket_pdf(sale_id: int, db: Session = Depends(get_db)):
         from app.models.user_model import User 
         seller = db.query(User).filter(User.user_id == sale.user_id).first()
 
-    # Datos dinámicos o Fallback
-    store_name = store.name.upper() if store else "SMART PE S.A.C."
-    store_address = store.address or "Dirección no registrada"
-    store_phone = f"Telf: {store.phone}" if (store and store.phone) else "Telf: (01) 000-0000"
-    store_ruc = f"RUC: {store.ruc}" if (store and store.ruc) else "RUC: 20601234567"
+    from app.models.setting_model import Setting
+    settings_db = db.query(Setting).all()
+    settings_dict = {s.key: s.value for s in settings_db}
+
+    # Datos dinámicos consolidados de Tienda + Empresa
+    company_name = settings_dict.get("company_name", "SMART PE S.A.C.")
+    store_name = f"{company_name} | {store.name.upper()}" if store else company_name
+    comp_address = settings_dict.get("company_address")
+    store_address = comp_address if comp_address else (store.address or "Dirección no registrada")
+    
+    comp_phone = settings_dict.get("company_phone")
+    store_phone = f"Telf: {comp_phone}" if comp_phone else (f"Telf: {store.phone}" if (store and store.phone) else "Telf: (01) 000-0000")
+    
+    comp_ruc = settings_dict.get("company_ruc")
+    store_ruc = f"RUC: {comp_ruc}" if comp_ruc else (f"RUC: {store.ruc}" if (store and store.ruc) else "RUC: 20601234567")
 
     c.setFont("Helvetica-Bold", 13)
     c.drawCentredString(width / 2, y, store_name)
@@ -497,7 +733,7 @@ def generate_ticket_pdf(sale_id: int, db: Session = Depends(get_db)):
         
         c.drawString(col_cant, y, str(detail.quantity))
         c.drawString(col_desc, y, p_name)
-        c.drawRightString(col_total, y, f"{detail.subtotal:.2f}")
+        c.drawRightString(col_total, y, fmt(detail.subtotal))
         
         y -= 3.5 * mm
         
@@ -536,7 +772,7 @@ def generate_ticket_pdf(sale_id: int, db: Session = Depends(get_db)):
     # SUBTOTAL (antes de descuento)
     c.drawRightString(x_symbol - 2*mm, y, "SUBTOTAL:") 
     c.drawString(x_symbol, y, "S/")
-    c.drawRightString(x_amount, y, f"{total_bruto:.2f}")
+    c.drawRightString(x_amount, y, fmt(total_bruto))
     y -= 4 * mm
     
     # DESCUENTO (solo si hay)
@@ -545,24 +781,24 @@ def generate_ticket_pdf(sale_id: int, db: Session = Depends(get_db)):
         c.drawRightString(x_symbol - 2*mm, y, "DESCUENTO:") 
         c.drawString(x_symbol, y, "S/")
         c.setFont("Helvetica-Bold", 8)
-        c.drawRightString(x_amount, y, f"-{descuento:.2f}")
+        c.drawRightString(x_amount, y, f"-{fmt(descuento)}")
         c.setFont("Helvetica", 8)
         y -= 4 * mm
     
     c.drawRightString(x_symbol - 2*mm, y, "OP. GRAVADA:") 
     c.drawString(x_symbol, y, "S/")
-    c.drawRightString(x_amount, y, f"{base_imponible:.2f}")
+    c.drawRightString(x_amount, y, fmt(base_imponible))
     y -= 4 * mm
     
     c.drawRightString(x_symbol - 2*mm, y, "I.G.V. (18%):")
     c.drawString(x_symbol, y, "S/")
-    c.drawRightString(x_amount, y, f"{igv:.2f}")
+    c.drawRightString(x_amount, y, fmt(igv))
     y -= 4 * mm
     
     c.setFont("Helvetica-Bold", 10)
     c.drawRightString(x_symbol - 2*mm, y, "TOTAL:")
     c.drawString(x_symbol, y, "S/")
-    c.drawRightString(x_amount, y, f"{total_neto:.2f}")
+    c.drawRightString(x_amount, y, fmt(total_neto))
     y -= 6 * mm
 
     c.setFont("Helvetica", 6.5)
@@ -627,7 +863,8 @@ def generate_ticket_pdf(sale_id: int, db: Session = Depends(get_db)):
         c.drawCentredString(width / 2, y, f"Estado SUNAT: {sale.sunat_status}")
 
     y -= 5 * mm
-    c.drawCentredString(width / 2, y, "Gracias por su preferencia")
+    ticket_footer = settings_dict.get("ticket_footer", "Gracias por su preferencia")
+    c.drawCentredString(width / 2, y, ticket_footer)
     
     c.save()
     buffer.seek(0)

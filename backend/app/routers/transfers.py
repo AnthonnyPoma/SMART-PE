@@ -125,9 +125,9 @@ def dispatch_transfer(
     if transfer.status != "PENDIENTE":
         raise HTTPException(status_code=400, detail="Solo se pueden despachar transferencias PENDIENTES")
         
-    # Verificar que soy usuario de la tienda ORIGEN
-    # (O que soy Admin)
-    # Aquí asumimos confianza o validación extra si current_user.store_id != transfer.source_store_id
+    # Verificar que soy usuario de la tienda ORIGEN o SuperAdmin (role_id == 1)
+    if current_user.store_id != transfer.source_store_id and current_user.role_id != 1:
+        raise HTTPException(status_code=403, detail="No tienes permiso para despachar desde esta tienda.")
     
     # PROCESAR CADA ITEM
     for detail in transfer.details:

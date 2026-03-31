@@ -36,3 +36,36 @@ class PurchaseDetail(Base):
 
     purchase = relationship("Purchase", back_populates="details")
     product = relationship("Product")
+
+class PurchaseOrder(Base):
+    __tablename__ = "purchase_orders"
+
+    po_id = Column(Integer, primary_key=True, index=True)
+    supplier_id = Column(Integer, ForeignKey("suppliers.supplier_id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False) # Quién generó la OC
+    
+    status = Column(String, default="PENDIENTE") # PENDIENTE, RECIBIDO, ANULADO
+    expected_date = Column(DateTime(timezone=True), nullable=True) # Fecha esperada de entrega
+    total_amount = Column(Float, default=0.0)
+    notes = Column(Text, nullable=True)
+    
+    date_created = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relaciones
+    supplier = relationship("Supplier")
+    user = relationship("User")
+    details = relationship("PurchaseOrderDetail", back_populates="purchase_order")
+
+class PurchaseOrderDetail(Base):
+    __tablename__ = "purchase_order_details"
+
+    detail_id = Column(Integer, primary_key=True, index=True)
+    po_id = Column(Integer, ForeignKey("purchase_orders.po_id"))
+    product_id = Column(Integer, ForeignKey("products.product_id"))
+    
+    quantity = Column(Integer, nullable=False)
+    unit_cost = Column(Float, nullable=False)
+    subtotal = Column(Float, nullable=False)
+
+    purchase_order = relationship("PurchaseOrder", back_populates="details")
+    product = relationship("Product")

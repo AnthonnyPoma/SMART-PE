@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import Layout from '../components/Layout';
 import api from '../api/axios';
+import { formatCurrency } from '../utils/format';
 import { 
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer 
@@ -23,6 +24,8 @@ import GroupIcon from '@mui/icons-material/Group';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'; // Icono original de utilidad
 import FilterListIcon from '@mui/icons-material/FilterList';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ef5350', '#ab47bc'];
 
@@ -55,22 +58,26 @@ function Dashboard() {
   const [inventoryValuation, setInventoryValuation] = useState({ total_valuation: 0, total_items: 0 });
   const [dinosaurProducts, setDinosaurProducts] = useState([]);
 
+  // Data Comparativa Tiendas
+  const [storesComparison, setStoresComparison] = useState([]);
+
   const fetchDashboardData = React.useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params = { start_date: startDate, end_date: endDate };
+      const params = { start_date: startDate, end_date: endDate, store_id: localStorage.getItem('store_id') || undefined };
       
-      const [resSummary, resTop, resCat, resSeller, resPayment, resProds, resValuation, resDino, resHour] = await Promise.all([
+      const [resSummary, resTop, resCat, resSeller, resPayment, resProds, resValuation, resDino, resHour, resStores] = await Promise.all([
         api.get('/reports/sales-summary', { params }),
         api.get('/reports/top-products', { params }),
         api.get('/reports/by-category', { params }),
         api.get('/reports/by-seller', { params }),
         api.get('/reports/payment-methods', { params }),
-        api.get('/products/'),
-        api.get('/reports/inventory-valuation'), // Global (o por store si se filtra dashboard.py)
-        api.get('/reports/low-rotation', { params: { days: 30 } }), // Fijo 30 días
-        api.get('/reports/sales-by-hour', { params }) // Nuevo
+        api.get('/products/', { params: { store_id: params.store_id } }),
+        api.get('/reports/inventory-valuation', { params: { store_id: params.store_id } }),
+        api.get('/reports/low-rotation', { params: { days: 30, store_id: params.store_id } }),
+        api.get('/reports/sales-by-hour', { params }), // Nuevo
+        api.get('/reports/stores-comparison', { params: { start_date: startDate, end_date: endDate } }) // Comparativa
       ]);
 
       setSummary(resSummary.data);
@@ -81,6 +88,7 @@ function Dashboard() {
       setInventoryValuation(resValuation.data);
       setDinosaurProducts(resDino.data);
       setSalesByHour(resHour.data);
+      setStoresComparison(resStores.data);
 
       const critical = resProds.data.filter(p => p.stock <= p.min_stock);
       setLowStockProducts(critical);
@@ -132,6 +140,58 @@ function Dashboard() {
 
   return (
     <Layout>
+      <style>{`
+        @media print {
+          @page { size: A4 portrait; margin: 15mm; }
+          body, html, #root, main { 
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important; 
+            background-color: white !important;
+            color: #000 !important;
+            display: block !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+          ::-webkit-scrollbar { display: none; }
+          
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+
+          /* Typography for Print */
+          .print-only * { font-family: 'Helvetica', 'Arial', sans-serif !important; }
+          .print-header { border-bottom: 3px solid #1a237e; padding-bottom: 10px; margin-bottom: 20px; }
+          .print-title { font-size: 24pt; font-weight: bold; color: #1a237e; margin: 0; text-transform: uppercase; }
+          .print-subtitle { font-size: 14pt; color: #424242; margin-top: 5px; }
+          .print-meta { font-size: 10pt; color: #666; margin-top: 10px; display: flex; justify-content: space-between; }
+          
+          .print-section { margin-bottom: 30px; page-break-inside: avoid; }
+          .print-section-title { font-size: 14pt; font-weight: bold; color: #1a237e; border-bottom: 1px solid #e0e0e0; padding-bottom: 5px; margin-bottom: 15px; text-transform: uppercase;}
+          .print-page-break { page-break-before: always; break-before: page; padding-top: 15px; }
+          
+          /* KPI Grid for Print */
+          .print-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 30px; }
+          .print-kpi-card { border: 1px solid #ccc; padding: 15px; border-radius: 4px; background: #fafafa; }
+          .print-kpi-label { font-size: 9pt; color: #666; text-transform: uppercase; font-weight: bold; }
+          .print-kpi-value { font-size: 18pt; font-weight: bold; color: #000; margin-top: 5px; }
+          
+          /* Tables for Print */
+          .print-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10pt; }
+          .print-table th { background-color: #f0f0f0; color: #333; font-weight: bold; text-align: left; padding: 8px; border: 1px solid #ccc; }
+          .print-table th.right { text-align: right; }
+          .print-table td { padding: 8px; border: 1px solid #ccc; }
+          .print-table td.right { text-align: right; }
+          .print-table tr:nth-child(even) { background-color: #fafafa; }
+          
+          .print-row { display: flex; gap: 20px; }
+          .print-col { flex: 1; }
+        }
+        @media screen {
+          .print-only { display: none !important; }
+        }
+      `}</style>
+      
+      <Box className="no-print">
+
       <Box sx={{ mb: 2 }}>
         <Typography variant="h4" fontWeight="bold" color="text.primary">
           Panel de Control
@@ -144,7 +204,7 @@ function Dashboard() {
       {/* FILTROS */}
       <Paper elevation={0} sx={{ p: 2, mb: 3, bgcolor: 'background.default', border: '1px solid #e0e0e0', borderRadius: 2 }}>
          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={4} md={3}>
+            <Grid item xs={12} sm={6} md={3}>
                <TextField 
                   label="Desde" type="date" fullWidth size="small"
                   InputLabelProps={{ shrink: true }}
@@ -152,7 +212,7 @@ function Dashboard() {
                   sx={{ bgcolor: 'white' }}
                />
             </Grid>
-            <Grid item xs={12} sm={4} md={3}>
+            <Grid item xs={12} sm={6} md={3}>
                <TextField 
                   label="Hasta" type="date" fullWidth size="small"
                   InputLabelProps={{ shrink: true }}
@@ -160,12 +220,20 @@ function Dashboard() {
                   sx={{ bgcolor: 'white' }}
                />
             </Grid>
-            <Grid item xs={12} sm={4} md={2}>
+            <Grid item xs={12} sm={6} md={2}>
                <Button 
                   variant="outlined" fullWidth startIcon={<FilterListIcon />}
                   onClick={fetchDashboardData} disabled={loading}
                >
                   {loading ? '...' : 'Filtrar'}
+               </Button>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+               <Button 
+                  variant="contained" color="secondary" fullWidth startIcon={<PictureAsPdfIcon />}
+                  onClick={() => window.print()} disabled={loading}
+               >
+                  Exportar PDF
                </Button>
             </Grid>
          </Grid>
@@ -176,7 +244,8 @@ function Dashboard() {
         <Tabs value={tabValue} onChange={handleTabChange} textColor="primary" indicatorColor="primary">
           <Tab icon={<TrendingUpIcon />} iconPosition="start" label="Gerencial" />
           <Tab icon={<InventoryIcon />} iconPosition="start" label="Inventario" />
-          <Tab icon={<GroupIcon />} iconPosition="start" label="Equipo" /> 
+          <Tab icon={<GroupIcon />} iconPosition="start" label="Equipo" />
+          <Tab icon={<StorefrontIcon />} iconPosition="start" label="Sucursales" />
         </Tabs>
       </Paper>
 
@@ -203,7 +272,7 @@ function Dashboard() {
                     <Grid item xs={12} sm={6} md={3}>
                       <KpiCard 
                         title="VENTA TOTAL" 
-                        value={`S/ ${summary.total_sales.toFixed(2)}`} 
+                        value={formatCurrency(summary.total_sales)} 
                         icon={<AttachMoneyIcon fontSize="large" />} 
                         color="#1565c0" 
                         growth={summary.growth?.sales}
@@ -212,7 +281,7 @@ function Dashboard() {
                     <Grid item xs={12} sm={6} md={3}>
                       <KpiCard 
                         title="UTILIDAD BRUTA" 
-                        value={`S/ ${summary.gross_profit.toFixed(2)}`} 
+                        value={formatCurrency(summary.gross_profit)} 
                         subtitle="Ganancia estimada" 
                         icon={<AccountBalanceWalletIcon fontSize="large" />} 
                         color="#2e7d32" 
@@ -231,7 +300,7 @@ function Dashboard() {
                     <Grid item xs={12} sm={6} md={3}>
                       <KpiCard 
                         title="TICKET PROMEDIO" 
-                        value={`S/ ${summary.average_ticket.toFixed(2)}`} 
+                        value={formatCurrency(summary.average_ticket)} 
                         icon={<TrendingUpIcon fontSize="large" />} 
                         color="#ed6c02" 
                         growth={summary.growth?.ticket}
@@ -248,7 +317,7 @@ function Dashboard() {
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis dataKey="date" />
                                     <YAxis />
-                                    <Tooltip formatter={(value) => `S/ ${value}`} />
+                                    <Tooltip formatter={(value) => formatCurrency(value)} />
                                     <Bar dataKey="total" fill="#1565c0" name="Ventas" />
                                 </BarChart>
                             </ResponsiveContainer>
@@ -279,7 +348,7 @@ function Dashboard() {
                                         {paymentMethods.map((m, i) => (
                                             <TableRow key={i}>
                                                 <TableCell>{m.name}</TableCell>
-                                                <TableCell align="right">S/ {m.value.toFixed(2)}</TableCell>
+                                                <TableCell align="right">{formatCurrency(m.value)}</TableCell>
                                                 <TableCell align="right">{summary.total_sales > 0 ? `${((m.value/summary.total_sales)*100).toFixed(1)}%` : '0%'}</TableCell>
                                             </TableRow>
                                         ))}
@@ -300,7 +369,7 @@ function Dashboard() {
                        <Grid item xs={12} md={6}>
                           <KpiCard 
                               title="VALORIZADO (ESTIMADO)" 
-                              value={`S/ ${inventoryValuation.total_valuation.toFixed(2)}`} 
+                              value={formatCurrency(inventoryValuation.total_valuation)} 
                               subtitle={`${inventoryValuation.total_items} unds. (Basado en Precio Lista)`}
                               icon={<AccountBalanceWalletIcon fontSize="large" />} 
                               color="#4527a0" 
@@ -346,7 +415,7 @@ function Dashboard() {
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis type="number" />
                                         <YAxis dataKey="name" type="category" width={100} />
-                                        <Tooltip formatter={(value) => `S/ ${value}`} />
+                                        <Tooltip formatter={(value) => formatCurrency(value)} />
                                         <Bar dataKey="value" fill="#8884d8" name="Ventas" />
                                     </BarChart>
                                 </ResponsiveContainer>
@@ -374,7 +443,7 @@ function Dashboard() {
                                                     <TableRow key={i}>
                                                         <TableCell>{d.name}</TableCell>
                                                         <TableCell align="right">{d.stock}</TableCell>
-                                                        <TableCell align="right" sx={{ color: 'text.secondary' }}>S/ {d.value.toFixed(2)}</TableCell>
+                                                        <TableCell align="right" sx={{ color: 'text.secondary' }}>{formatCurrency(d.value)}</TableCell>
                                                     </TableRow>
                                                 ))
                                             )}
@@ -430,7 +499,7 @@ function Dashboard() {
                                       <CartesianGrid strokeDasharray="3 3" />
                                       <XAxis dataKey="name" />
                                       <YAxis />
-                                      <Tooltip formatter={(value) => `S/ ${value}`} />
+                                      <Tooltip formatter={(value) => formatCurrency(value)} />
                                       <Bar dataKey="total" fill="#0288d1" name="Ventas" radius={[4, 4, 0, 0]} />
                                   </BarChart>
                               </ResponsiveContainer>
@@ -456,8 +525,263 @@ function Dashboard() {
                     </Grid>
                 </Box>
             )}
+
+            {/* 4. COMPARATIVA SUCURSALES */}
+            {tabValue === 3 && (
+                <Box>
+                    <Typography variant="h5" fontWeight="bold" gutterBottom color="text.primary">
+                        🏢 Comparativa de Sucursales
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" mb={3}>
+                        Rendimiento comparativo de todas las tiendas en el período seleccionado.
+                    </Typography>
+
+                    {storesComparison.length === 0 ? (
+                        <Paper sx={{ p: 4, textAlign: 'center' }}>
+                            <Typography color="text.secondary">No hay datos para el período seleccionado.</Typography>
+                        </Paper>
+                    ) : (
+                        <>
+                            {/* Gráfico de barras comparativo */}
+                            <Paper elevation={3} sx={{ p: 3, mb: 3, height: 400 }}>
+                                <Typography variant="h6" gutterBottom fontWeight="bold">Ventas Totales por Sucursal</Typography>
+                                <ResponsiveContainer width="100%" height="85%">
+                                    <BarChart data={storesComparison} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis type="number" tickFormatter={(v) => `S/ ${(v/1000).toFixed(0)}k`} />
+                                        <YAxis type="category" dataKey="store_name" width={140} />
+                                        <Tooltip formatter={(value) => formatCurrency(value)} />
+                                        <Bar dataKey="total_sales" name="Ventas Totales" radius={[0, 4, 4, 0]}>
+                                            {storesComparison.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </Paper>
+
+                            {/* Tabla resumen */}
+                            <TableContainer component={Paper} elevation={3} sx={{ borderRadius: 2 }}>
+                                <Table>
+                                    <TableHead sx={{ bgcolor: 'primary.main' }}>
+                                        <TableRow>
+                                            <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Sucursal</TableCell>
+                                            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Ventas Totales</TableCell>
+                                            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="center">Transacciones</TableCell>
+                                            <TableCell sx={{ color: 'white', fontWeight: 'bold' }} align="right">Ticket Promedio</TableCell>
+                                            <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Top Producto</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {storesComparison.map((store, idx) => (
+                                            <TableRow key={store.store_id} hover sx={{ bgcolor: idx === 0 ? 'rgba(0,136,254,0.05)' : 'inherit' }}>
+                                                <TableCell>
+                                                    <Box display="flex" alignItems="center" gap={1}>
+                                                        {idx === 0 && <EmojiEventsIcon sx={{ color: '#FFD700', fontSize: 20 }} />}
+                                                        <Typography fontWeight={idx === 0 ? 'bold' : 'normal'}>
+                                                            {store.store_name}
+                                                        </Typography>
+                                                    </Box>
+                                                </TableCell>
+                                                <TableCell align="right">
+                                                    <Typography fontWeight="bold" color="success.main">
+                                                        {formatCurrency(store.total_sales)}
+                                                    </Typography>
+                                                </TableCell>
+                                                <TableCell align="center">
+                                                    <Chip label={store.transaction_count} color="primary" size="small" />
+                                                </TableCell>
+                                                <TableCell align="right">{formatCurrency(store.avg_ticket)}</TableCell>
+                                                <TableCell>
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        {store.top_product || '-'}
+                                                    </Typography>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        </>
+                    )}
+                </Box>
+            )}
         </Box>
       )}
+      </Box>
+
+      {/* =========================================
+          VISTA EXCLUSIVA PARA REPORTE PDF (Oculta en web)
+          ========================================= */}
+      <Box className="print-only">
+        {summary && (
+          <>
+            <div className="print-header">
+              <div className="print-title">SMART PE S.A.C.</div>
+              <div className="print-subtitle">REPORTE GERENCIAL DE RESULTADOS</div>
+              <div className="print-meta">
+                <span><strong>Periodo Analizado:</strong> {startDate === endDate ? startDate : `Del ${startDate} al ${endDate}`}</span>
+                <span><strong>Fecha de Emisión:</strong> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}</span>
+              </div>
+            </div>
+
+            <div className="print-section">
+              <div className="print-section-title">A. Resumen Ejecutivo de Operaciones</div>
+              <div className="print-kpi-grid">
+                <div className="print-kpi-card">
+                  <div className="print-kpi-label">Venta Bruta Total</div>
+                  <div className="print-kpi-value">{formatCurrency(summary.total_sales)}</div>
+                </div>
+                <div className="print-kpi-card">
+                  <div className="print-kpi-label">Utilidad Bruta Proyectada</div>
+                  <div className="print-kpi-value">{formatCurrency(summary.gross_profit)}</div>
+                </div>
+                <div className="print-kpi-card">
+                  <div className="print-kpi-label">Volumen de Transacciones</div>
+                  <div className="print-kpi-value">{summary.transaction_count} Facturas/Boletas</div>
+                </div>
+                <div className="print-kpi-card">
+                  <div className="print-kpi-label">Ticket Promedio</div>
+                  <div className="print-kpi-value">{formatCurrency(summary.average_ticket)}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="print-section">
+              <div className="print-row">
+                <div className="print-col">
+                  <div className="print-section-title">B. Flujo de Medios de Pago</div>
+                  <table className="print-table">
+                    <thead>
+                      <tr>
+                        <th>Método Aplicado</th>
+                        <th className="right">Monto Recaudado</th>
+                        <th className="right">Participación (%)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paymentMethods.map((m, i) => (
+                        <tr key={i}>
+                          <td>{m.name}</td>
+                          <td className="right">{formatCurrency(m.value)}</td>
+                          <td className="right">{summary.total_sales > 0 ? ((m.value/summary.total_sales)*100).toFixed(2) : 0}%</td>
+                        </tr>
+                      ))}
+                      {paymentMethods.length === 0 && <tr><td colSpan="3" align="center">Sin datos de pagos</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="print-col">
+                  <div className="print-section-title">C. Rendimiento del Personal Comercial</div>
+                  <table className="print-table">
+                    <thead>
+                      <tr>
+                        <th>Colaborador</th>
+                        <th className="right">Monto Colocado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bySeller.slice(0, 10).map((s, i) => (
+                        <tr key={i}>
+                          <td>{s.name}</td>
+                          <td className="right">{formatCurrency(s.value)}</td>
+                        </tr>
+                      ))}
+                      {bySeller.length === 0 && <tr><td colSpan="2" align="center">Sin datos</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="print-page-break"></div>
+            <div className="print-section">
+              <div className="print-header">
+                 <div className="print-subtitle">ANEXOS: DETALLE DE ESTRUCTURA DE VENTAS</div>
+                 <div className="print-meta">
+                   <span><strong>Emitido:</strong> {new Date().toLocaleDateString()}</span>
+                   <span>Pág. 2</span>
+                 </div>
+              </div>
+
+              <div className="print-row">
+                <div className="print-col">
+                  <div className="print-section-title">D. Categorías Dominantes</div>
+                  <table className="print-table">
+                    <thead>
+                      <tr>
+                        <th>Línea de Negocio</th>
+                        <th className="right">Volumen Soles (S/)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {byCategory.map((c, i) => (
+                        <tr key={i}>
+                          <td>{c.name}</td>
+                          <td className="right">{formatCurrency(c.value)}</td>
+                        </tr>
+                      ))}
+                      {byCategory.length === 0 && <tr><td colSpan="2" align="center">Sin datos</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="print-col">
+                  <div className="print-section-title">E. Top 15 SKUs (Productos Estrella)</div>
+                  <table className="print-table">
+                    <thead>
+                      <tr>
+                        <th>N°</th>
+                        <th>Descripción del Producto / SKU</th>
+                        <th className="right">Facturado (S/)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topProducts.slice(0, 15).map((p, i) => (
+                        <tr key={i}>
+                          <td>{i+1}</td>
+                          <td>{p.name}</td>
+                          <td className="right">{formatCurrency(p.value)}</td>
+                        </tr>
+                      ))}
+                      {topProducts.length === 0 && <tr><td colSpan="3" align="center">Sin datos</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <div className="print-section">
+                <div className="print-section-title">F. Estado del Almacén Actual (Valorización)</div>
+                <table className="print-table" style={{ width: '50%' }}>
+                    <thead>
+                        <tr>
+                            <th>Indicador de Stock</th>
+                            <th className="right">Monto Estimado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Valorización Total Estimada (P.Lista)</td>
+                            <td className="right">{formatCurrency(inventoryValuation?.total_valuation || 0)}</td>
+                        </tr>
+                        <tr>
+                            <td>Unidades Totales Físicas Disponibles</td>
+                            <td className="right">{(inventoryValuation?.total_items || 0).toLocaleString()} Unds.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style={{ marginTop: '50px', paddingTop: '20px', borderTop: '1px solid #000', width: '250px', textAlign: 'center', fontSize: '10pt' }}>
+                 Firma y Sello de Gerencia / Administración
+            </div>
+
+          </>
+        )}
+      </Box>
+
     </Layout>
   );
 }

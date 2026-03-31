@@ -32,19 +32,19 @@ class CashMovementResponse(BaseModel):
     timestamp: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # --- RESPONSE ---
 class RoleSummary(BaseModel):
     name: str
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class UserSummary(BaseModel):
     username: str
     role: Optional[RoleSummary]
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 # --- RESPONSE ---
 class CashRegisterResponse(BaseModel):

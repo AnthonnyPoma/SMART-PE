@@ -7,7 +7,10 @@ class Category(Base):
 
     category_id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False, unique=True)
-    # Relacion definida abajo para evitar ForwardRef issues
+    parent_id = Column(Integer, ForeignKey("categories.category_id"), nullable=True)
+
+    # Relaciones
+    subcategories = relationship("Category", backref="parent", remote_side=[category_id])
 
 class Product(Base):
     __tablename__ = "products"
@@ -24,10 +27,7 @@ class Product(Base):
     
     category_id = Column(Integer, ForeignKey("categories.category_id"))
 
-    # Relaciones
-    category_id = Column(Integer, ForeignKey("categories.category_id"))
-
-    # Relaciones - DEFINIDAS EXTERNAMENTE AL FINAL DEL ARCHIVO
+    # Relaciones definidas al final del archivo para evitar ForwardRef
 
 
 class Inventory(Base):
@@ -38,9 +38,7 @@ class Inventory(Base):
     store_id = Column(Integer, ForeignKey("stores.store_id"))
     quantity = Column(Integer, default=0)
 
-    quantity = Column(Integer, default=0)
-
-    # Relaciones definidas abajo
+    # Relaciones definidas al final del archivo
 
 class ProductSeries(Base):
     __tablename__ = "product_series"
@@ -50,14 +48,9 @@ class ProductSeries(Base):
     store_id = Column(Integer, ForeignKey("stores.store_id"))
     serial_number = Column(String, unique=True)
     status = Column(String, default="disponible") 
-    
-    # 👇 ESTA ES LA LÍNEA QUE FALTABA Y CAUSABA EL ERROR
     cost = Column(Float, default=0) 
 
-    # 👇 ESTA ES LA LÍNEA QUE FALTABA Y CAUSABA EL ERROR
-    cost = Column(Float, default=0) 
-
-    # Relaciones definidas abajo
+    # Relaciones definidas al final del archivo
 
 # ==========================================
 # DEFINICIÓN DE RELACIONES EXTERNAS (Para evitar ForwardRef errors)

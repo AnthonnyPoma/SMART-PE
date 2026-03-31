@@ -7,8 +7,8 @@ import { useCash } from '../../context/CashContext';
 
 // MODOS: 'OPEN', 'CLOSE'
 // MODOS: 'OPEN', 'CLOSE'
-export default function CashModal({ open, mode, onClose, storeId }) {
-    const { openCashRegister, closeCashRegister, loading } = useCash();
+export default function CashModal({ open, mode, onClose }) {
+    const { openCashRegister, closeCashRegister } = useCash();
     const [amount, setAmount] = useState('');
     const [notes, setNotes] = useState('');
     const [error, setError] = useState('');
@@ -119,10 +119,10 @@ export default function CashModal({ open, mode, onClose, storeId }) {
                 <Box mt={2}>
                     {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
                     
-                    <Typography variant="body2" color="textSecondary" paragraph>
+                    <Typography variant="body2" color="text.secondary" paragraph>
                         {mode === 'OPEN' 
                             ? 'Ingresa el dinero en efectivo con el que inicias el día.' 
-                            : 'Cuenta todo el dinero en efectivo (billetes + monedas) e ingrésalo aquí para comparar con el sistema.'}
+                            : 'Cuenta todo el dinero en efectivo (billetes + monedas) e ingrésalo aquí para comparar con el sistema. Nota: Si la diferencia (Sobrante o Faltante) supera los S/ 10, es OBLIGATORIO escribir una justificación.'}
                     </Typography>
 
                     <TextField

@@ -12,7 +12,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import Layout from '../components/Layout';
 import axios from 'axios';
 
-const API_URL = "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 function Stores() {
     const [stores, setStores] = useState([]);
@@ -206,7 +206,7 @@ function Stores() {
                     <TableContainer component={Paper}>
                         <Table>
                             <TableHead>
-                                <TableRow sx={{ bgcolor: 'grey.100' }}>
+                                <TableRow sx={{ bgcolor: 'action.hover' }}>
                                     <TableCell>Nombre</TableCell>
                                     <TableCell>Dirección</TableCell>
                                     <TableCell>Ciudad</TableCell>
@@ -316,7 +316,7 @@ function Stores() {
                     </DialogTitle>
                     <DialogContent>
                         {/* AGREGAR EMPLEADO */}
-                        <Box sx={{ mb: 3, mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                        <Box sx={{ mb: 3, mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
                             <Typography variant="subtitle2" gutterBottom fontWeight="bold">
                                 Agregar Empleado
                             </Typography>
@@ -357,7 +357,7 @@ function Stores() {
                         <TableContainer component={Paper} variant="outlined">
                             <Table size="small">
                                 <TableHead>
-                                    <TableRow sx={{ bgcolor: 'grey.100' }}>
+                                    <TableRow sx={{ bgcolor: 'action.hover' }}>
                                         <TableCell>Nombre</TableCell>
                                         <TableCell>Usuario</TableCell>
                                         <TableCell>Rol</TableCell>

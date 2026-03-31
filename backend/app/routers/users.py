@@ -6,7 +6,7 @@ from app.core.database import get_db
 from app.models.user_model import User
 from app.schemas.user_schema import UserCreate, UserResponse 
 from passlib.context import CryptContext
-from sqlalchemy import text # 👈 1. IMPORTA ESTO (IMPORTANTE)
+from sqlalchemy import text
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 router = APIRouter()
@@ -20,6 +20,9 @@ class UserUpdate(BaseModel):
     role_id: int
     is_active: bool
     password: Optional[str] = None 
+    commission_rate: Optional[float] = 0.0
+    monthly_goal: Optional[float] = 0.0
+    supervisor_pin: Optional[str] = None
 
 # --- SCHEMA AUXILIAR PARA ROLES ---
 class RoleResponse(BaseModel):
@@ -37,23 +40,21 @@ from app.dependencies import get_current_user # Importar dependencia
 @router.get("/", response_model=List[UserResponse])
 def read_users(
     skip: int = 0, 
-    limit: int = 100, 
+    limit: int = 100,
+    store_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Lista los usuarios.
-    - Si es SuperAdmin (role 1 global?), podría ver todos.
-    - Por defecto, filtramos por la tienda del usuario actual para aislamiento.
+    Lista los usuarios. Admins pueden pasar store_id para ver otra tienda.
     """
-    # Lógica de aislamiento: Solo ver usuarios de MI tienda
-    # (A menos que implementemos un rol 'God Mode' mas adelante)
-    users = db.query(User).filter(User.store_id == current_user.store_id).offset(skip).limit(limit).all()
+    effective_store_id = store_id if store_id is not None else current_user.store_id
+    users = db.query(User).filter(User.store_id == effective_store_id).offset(skip).limit(limit).all()
     return users
 
 # 2. CREAR USUARIO (POST /users/)
 @router.post("/", response_model=UserResponse)
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
+def create_user(user: UserCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if db.query(User).filter(User.username == user.username).first():
         raise HTTPException(status_code=400, detail="El usuario ya existe")
     if user.dni and db.query(User).filter(User.dni == user.dni).first():
@@ -71,7 +72,10 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         email=user.email,
         phone=user.phone,
         address=user.address,
-        is_active=user.is_active
+        is_active=user.is_active,
+        commission_rate=user.commission_rate,
+        monthly_goal=user.monthly_goal,
+        supervisor_pin=user.supervisor_pin
     )
     
     db.add(new_user)
@@ -81,7 +85,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
 # 3. ACTUALIZAR USUARIO (PUT /users/{id})
 @router.put("/{user_id}", response_model=UserResponse)
-def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get_db)):
+def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     db_user = db.query(User).filter(User.user_id == user_id).first()
     if not db_user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -93,6 +97,9 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
     db_user.address = user_update.address
     db_user.role_id = user_update.role_id
     db_user.is_active = user_update.is_active
+    db_user.commission_rate = user_update.commission_rate
+    db_user.monthly_goal = user_update.monthly_goal
+    db_user.supervisor_pin = user_update.supervisor_pin
 
     if user_update.password and len(user_update.password) > 0:
         db_user.password_hash = get_password_hash(user_update.password)
@@ -103,7 +110,7 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
 
 # 4. LISTAR ROLES (GET /users/roles)
 @router.get("/roles", response_model=List[RoleResponse])
-def read_roles(db: Session = Depends(get_db)):
+def read_roles(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     results = db.execute(text("SELECT role_id, name FROM roles")).fetchall()
     return [{"role_id": r[0], "name": r[1]} for r in results]
 
@@ -112,7 +119,8 @@ def read_roles(db: Session = Depends(get_db)):
 def assign_store_to_user(
     user_id: int,
     store_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Asignar o cambiar tienda de un empleado."""
     user = db.query(User).filter(User.user_id == user_id).first()

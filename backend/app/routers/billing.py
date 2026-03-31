@@ -4,12 +4,14 @@ from app.core.database import get_db
 from app.models.sale_model import Sale
 from app.models.client_model import Client
 from app.models.store_model import Store
+from app.models.user_model import User
+from app.dependencies import get_current_user
 from app.services.sunat import xml_generator, xml_signer, xml_sender
 
 router = APIRouter()
 
 @router.post("/billing/emit/{sale_id}")
-def emit_electronic_receipt(sale_id: int, db: Session = Depends(get_db)):
+def emit_electronic_receipt(sale_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """
     Genera, firma y envía el comprobante electrónico a SUNAT.
     """

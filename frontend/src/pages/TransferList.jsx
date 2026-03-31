@@ -23,6 +23,7 @@ function TransferList() {
     const [detailOpen, setDetailOpen] = useState(false);
     const [actionLoading, setActionLoading] = useState(false);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => {
         fetchTransfers();
     }, [tabIndex]);
@@ -107,7 +108,7 @@ function TransferList() {
                 <TableContainer component={Paper}>
                     <Table>
                         <TableHead>
-                            <TableRow sx={{ bgcolor: 'grey.200' }}>
+                            <TableRow sx={{ bgcolor: 'action.hover' }}>
                                 <TableCell>#</TableCell>
                                 <TableCell>Tienda Origen</TableCell>
                                 <TableCell>Tienda Destino</TableCell>

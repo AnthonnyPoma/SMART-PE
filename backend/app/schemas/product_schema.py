@@ -7,6 +7,7 @@ from datetime import datetime # Asegúrate de importar esto arriba
 # --- ESQUEMAS PARA CATEGORÍAS ---
 class CategoryBase(BaseModel):
     name: str
+    parent_id: Optional[int] = None
 
 class CategoryCreate(CategoryBase):
     pass
@@ -26,15 +27,26 @@ class ProductBase(BaseModel):
     min_stock: int = 5
     category_id: int # El usuario enviará el ID de la categoría (ej: 1 para Celulares)
     is_serializable: bool = False
-    image_url: Optional[str] = None # 👈 Campo nuevo para la imagen
+    image_url: Optional[str] = None
 
 class ProductCreate(ProductBase):
     pass # Podríamos agregar validaciones extra aquí si fuera necesario
+
+class ProductUpdate(BaseModel):
+    sku: Optional[str] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    base_price: Optional[Decimal] = None
+    min_stock: Optional[int] = None
+    category_id: Optional[int] = None
+    is_serializable: Optional[bool] = None
+    image_url: Optional[str] = None
 
 class ProductResponse(ProductBase):
     product_id: int
     category: Optional[CategoryResponse] = None # Para mostrar el nombre de la categoría al responder
     stock: int = 0
+    average_cost: Optional[float] = 0.0 # Necesario para el FrontEnd Margen %
 
     class Config:
         from_attributes = True
@@ -46,7 +58,7 @@ class StockEntry(BaseModel):
     unit_cost: float
     serials: List[str] = []
     
-    # --- NUEVOS CAMPOS PARA COMPRAS ---
+    # Campos de compras
     supplier_id: int
     document_type: str   # Ej: "FACTURA", "GUIA"
     document_number: str # Ej: "F001-2345"
@@ -57,14 +69,22 @@ class KardexResponse(BaseModel):
     date: datetime
     product_name: str
     sku: str
-    type: str     # "IN" o "OUT"
+    type: str     # "ENTRADA" o "SALIDA"
     quantity: int
     unit_cost: Optional[float] = 0.0
     reason: Optional[str] = None
     user_name: str
+    serial_number: Optional[str] = None  # IMEI individual
+    serial_numbers: Optional[List[str]] = []  # Lista de IMEIs agrupados
 
     class Config:
         from_attributes = True
+
+class KardexPaginatedResponse(BaseModel):
+    data: List[KardexResponse]
+    total_records: int
+    current_page: int
+    total_pages: int
     
 # --- ESQUEMA PARA SERIES DE PRODUCTOS (IMEIs) ---
 class ProductSeriesResponse(BaseModel):

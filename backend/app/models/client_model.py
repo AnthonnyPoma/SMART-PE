@@ -17,6 +17,7 @@ class Client(Base):
     phone = Column(String, nullable=True)
     address = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    accepts_marketing = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # ✅ ESTE SÍ LO NECESITAMOS (Verifica que esté en tu BD, si no, agrégalo)

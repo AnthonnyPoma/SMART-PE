@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -22,9 +22,13 @@ class User(Base):
     role_id = Column(Integer, ForeignKey("roles.role_id"))
     store_id = Column(Integer, ForeignKey("stores.store_id"))
 
+    # Datos de RRHH / Comisiones
+    commission_rate = Column(Float, default=0.0)
+    monthly_goal = Column(Float, default=0.0)
+
     # Relaciones
     role = relationship("Role") 
     store = relationship("Store", back_populates="users")
     
-    # 👇 ESTA ES LA LÍNEA QUE FALTA PARA EL KARDEX 👇
+    # Relación con movimientos de inventario (Kardex)
     movements = relationship("InventoryMovement", back_populates="user")

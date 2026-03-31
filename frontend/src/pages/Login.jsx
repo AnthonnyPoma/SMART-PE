@@ -14,7 +14,7 @@ function Login() {
   const parseJwt = (token) => {
     try {
       return JSON.parse(atob(token.split('.')[1]));
-    } catch (e) {
+    } catch {
       return null;
     }
   };
@@ -58,7 +58,7 @@ function Login() {
         <CardContent>
           <Box display="flex" flexDirection="column" alignItems="center" marginBottom={3}>
             
-            {/* 2. AQUÍ PONEMOS EL LOGO 👇 */}
+            {/* Logo */}
             <img 
               src={logo} 
               alt="Logo Smart PE" 

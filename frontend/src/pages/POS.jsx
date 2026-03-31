@@ -4,7 +4,7 @@ import {
   List, ListItem, ListItemButton, ListItemText, IconButton, Divider,
   Card, CardActionArea, CardContent, Chip, InputAdornment, Grid,
   Dialog, DialogTitle, DialogContent, DialogActions,
-  CircularProgress, useTheme
+  CircularProgress, useTheme, Checkbox, FormControlLabel
 } from '@mui/material';
 
 // Iconos
@@ -21,12 +21,15 @@ import StarIcon from '@mui/icons-material/Star';
 import DiscountIcon from '@mui/icons-material/Discount';  // Icono para descuentos
 import LockIcon from '@mui/icons-material/Lock';  // Icono para PIN
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents'; // Icono Trofeo
+import PauseIcon from '@mui/icons-material/Pause'; // Suspender Venta
+import ListAltIcon from '@mui/icons-material/ListAlt'; // Listar suspendidas
 
 import Layout from '../components/Layout';
 import CashGuard from '../components/cash/CashGuard';
+import { formatCurrency } from '../utils/format';
 import axios from "axios";
 
-const API_URL = "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 function POS() {
   const theme = useTheme();
@@ -35,15 +38,18 @@ function POS() {
   const [searchTerm, setSearchTerm] = useState('');
   const [total, setTotal] = useState(0);
   const searchInputRef = useRef(null);
+  const clientInputRef = useRef(null);
 
   // --- ESTADOS DE CLIENTE Y PUNTOS ---
   const [clientDni, setClientDni] = useState('');
   const [clientName, setClientName] = useState("");
   const [clientId, setClientId] = useState(null);
   const [clientPoints, setClientPoints] = useState(0);
+  const [acceptsMarketing, setAcceptsMarketing] = useState(false);
   const [loadingClient, setLoadingClient] = useState(false);
+  const [isManualClient, setIsManualClient] = useState(false);
 
-  // --- ESTADOS DE REDENCIÓN DE PUNTOS (NUEVO) ---
+  // Estados de redención de puntos de fidelización
   const [pointsUsed, setPointsUsed] = useState(0);
   const [pointsMoney, setPointsMoney] = useState(0);
 
@@ -65,6 +71,27 @@ function POS() {
   const [needsApproval, setNeedsApproval] = useState(false);
   const [netTotal, setNetTotal] = useState(0);
 
+  // --- Estados de Cupones Promocionales ---
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCouponId, setAppliedCouponId] = useState(null);
+  const [isVerifyingCoupon, setIsVerifyingCoupon] = useState(false);
+
+  // Estados de pago, vuelto y ventas suspendidas
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('Efectivo');
+  const [amountReceived, setAmountReceived] = useState('');
+  const [paymentReference, setPaymentReference] = useState('');
+  
+  const [suspendedSales, setSuspendedSales] = useState(() => {
+    const saved = localStorage.getItem('suspended_sales_v1');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [suspendedDialogOpen, setSuspendedDialogOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('suspended_sales_v1', JSON.stringify(suspendedSales));
+  }, [suspendedSales]);
+
   useEffect(() => {
     fetchProducts();
     if (searchInputRef.current) searchInputRef.current.focus();
@@ -81,13 +108,79 @@ function POS() {
       currentNet -= discountAmount;
     }
     
-    // 2. Restar Puntos (NUEVO)
+    // 2. Restar puntos canjeados
     if (pointsMoney > 0) {
       currentNet -= pointsMoney;
     }
     
     setNetTotal(currentNet > 0 ? currentNet : 0);
-  }, [cart, discountAmount, pointsMoney]); // Agregado pointsMoney
+  }, [cart, discountAmount, pointsMoney]);
+
+  useEffect(() => {
+    // Resetear descuentos y puntos si el total del carrito cambia a 0
+    if (total === 0) {
+      setDiscountType('PERCENTAGE');
+      setDiscountValue('');
+      setDiscountAmount(0);
+      setSupervisorPin('');
+      setNeedsApproval(false);
+      setPointsUsed(0);
+      setPointsMoney(0);
+      setCouponCode('');
+      setAppliedCouponId(null);
+    }
+  }, [total]);
+
+  // --- ATAJOS DE TECLADO ---
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // No interceptar si hay un Dialog/Modal abierto
+      const isModalOpen = imeiDialogOpen || discountDialogOpen || paymentDialogOpen || suspendedDialogOpen;
+      if (isModalOpen) return;
+
+      switch (e.key) {
+        case 'F1':
+          e.preventDefault();
+          if (cart.length > 0 && !loadingSale) handleCheckoutAttempt('Efectivo');
+          break;
+        case 'F2':
+          e.preventDefault();
+          if (searchInputRef.current) searchInputRef.current.focus();
+          break;
+        case 'F3':
+          e.preventDefault();
+          if (clientInputRef.current) clientInputRef.current.focus();
+          break;
+        case 'Escape':
+          e.preventDefault();
+          clearCart();
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  });
+
+  // --- LIMPIAR CARRITO ---
+  const clearCart = () => {
+    setCart([]);
+    setClientDni('');
+    setClientName('');
+    setClientId(null);
+    setClientPoints(0);
+    setPointsUsed(0);
+    setPointsMoney(0);
+    setDiscountAmount(0);
+    setDiscountValue('');
+    setCouponCode('');
+    setAppliedCouponId(null);
+    setSearchTerm('');
+    setAcceptsMarketing(false);
+    setIsManualClient(false);
+    if (searchInputRef.current) searchInputRef.current.focus();
+  };
 
   const fetchProducts = async () => {
     try {
@@ -113,9 +206,9 @@ function POS() {
       setClientName("");
       setClientId(null);
       setClientPoints(0);
-      // Resetear canje al cambiar cliente
       setPointsUsed(0);
       setPointsMoney(0);
+      setIsManualClient(false);
 
       try {
         const token = localStorage.getItem('token');
@@ -133,7 +226,7 @@ function POS() {
         // Si es RENIEC, clientId queda null y se registrará al cobrar
       } catch (error) {
         console.error("Error buscando cliente:", error);
-        alert("Cliente no encontrado en BD ni RENIEC. Ingrese nombre manual si es necesario.");
+        setIsManualClient(true);
       } finally {
         setLoadingClient(false);
       }
@@ -175,6 +268,44 @@ function POS() {
         setPointsUsed(pointsNeeded);
         setPointsMoney(finalMoney);
     }
+  };
+
+  // --- LÓGICA DE CUPONES ---
+  const handleValidateCoupon = async () => {
+    if (!couponCode.trim()) return;
+    setIsVerifyingCoupon(true);
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      const res = await axios.post(`${API_URL}/promotions/validate_code`, {
+        code: couponCode,
+        cart_total: total
+      }, config);
+      
+      if (res.data.valid) {
+        setDiscountType(res.data.discount_type);
+        setDiscountValue(res.data.value.toString());
+        setDiscountAmount(res.data.discount_amount);
+        setAppliedCouponId(res.data.promotion_id);
+      } else {
+        alert(res.data.message);
+        setAppliedCouponId(null);
+        setDiscountAmount(0);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Error al validar cupón");
+    } finally {
+      setIsVerifyingCoupon(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setCouponCode('');
+    setAppliedCouponId(null);
+    setDiscountType('PERCENTAGE');
+    setDiscountValue('');
+    setDiscountAmount(0);
   };
 
 
@@ -231,6 +362,7 @@ function POS() {
         serial_number: null
       }]);
     }
+    if (searchInputRef.current) searchInputRef.current.focus();
   };
 
   const addToCartWithImei = (imei) => {
@@ -249,15 +381,90 @@ function POS() {
       serial_number: imei
     }]);
     setImeiDialogOpen(false);
+    if (searchInputRef.current) searchInputRef.current.focus();
   };
 
   const removeFromCart = (uniqueId) => {
     setCart(cart.filter(item => item.uniqueId !== uniqueId));
   };
 
+  // 📌 LÓGICA DE SUSPENDER VENTA (TIER 3)
+  const suspendCurrentSale = () => {
+    if (cart.length === 0) return;
+    const suspendedSale = {
+      id: Date.now(),
+      date: new Date().toLocaleTimeString(),
+      cart,
+      clientDni,
+      clientName,
+      clientId,
+      clientPoints,
+      total,
+      netTotal,
+      discountType,
+      discountValue,
+      discountAmount,
+      pointsUsed,
+      pointsMoney,
+      couponCode,
+      appliedCouponId
+    };
+    setSuspendedSales([...suspendedSales, suspendedSale]);
+    clearCart();
+  };
+
+  const resumeSuspendedSale = (sale) => {
+    if (cart.length > 0) {
+      if (!window.confirm("Hay una venta actual cursando. ¿Deseas reemplazarla?")) return;
+    }
+    setCart(sale.cart || []);
+    setClientDni(sale.clientDni || '');
+    setClientName(sale.clientName || '');
+    setClientId(sale.clientId || null);
+    setClientPoints(sale.clientPoints || 0);
+    setDiscountType(sale.discountType || 'PERCENTAGE');
+    setDiscountValue(sale.discountValue || '');
+    setDiscountAmount(sale.discountAmount || 0);
+    setPointsUsed(sale.pointsUsed || 0);
+    setPointsMoney(sale.pointsMoney || 0);
+    setCouponCode(sale.couponCode || '');
+    setAppliedCouponId(sale.appliedCouponId || null);
+    
+    setSuspendedSales(suspendedSales.filter(s => s.id !== sale.id));
+    setSuspendedDialogOpen(false);
+  };
+
+  const openPaymentDialog = (method = 'Efectivo') => {
+    if (cart.length === 0) return alert("Carrito vacío");
+    setPaymentMethod(method);
+    setAmountReceived('');
+    setPaymentReference('');
+    setPaymentDialogOpen(true);
+  };
+
+  // 🛡️ VALIDACIÓN PREVENTIVA SUNAT (Antes de abrir el Modal)
+  const handleCheckoutAttempt = (method = 'Efectivo') => {
+    if (cart.length === 0) return alert("Carrito vacío");
+    if (netTotal > 700 && (!clientDni || clientDni.trim() === '')) {
+      alert("⚠️ RECHAZO SUNAT PREVENTIVO:\nPor normativa, toda boleta mayor a S/ 700.00 requiere identificar obligatoriamente al comprador con DNI o RUC. Por favor, asigne un cliente antes de cobrar.");
+      if (clientInputRef.current) clientInputRef.current.focus();
+      return;
+    }
+    openPaymentDialog(method);
+  };
+
   // 💰 PROCESO DE PAGO HÍBRIDO
   const handlePay = async () => {
     if (cart.length === 0) return alert("Carrito vacío");
+    
+    // 🛡️ VALIDACIONES TIER 3: Vuelto y Referencia
+    if (paymentMethod === 'Efectivo' && amountReceived && parseFloat(amountReceived) < netTotal) {
+         return alert("El monto recibido no puede ser menor al total a pagar.");
+    }
+    if (paymentMethod !== 'Efectivo' && !paymentReference.trim()) {
+         return alert(`Debe ingresar un N° de Operación o Referencia para pago con ${paymentMethod}.`);
+    }
+
     const token = localStorage.getItem('token'); 
     if (!token) { alert("❌ No autenticado"); return; }
 
@@ -274,7 +481,8 @@ function POS() {
                  document_number: clientDni,
                  first_name: clientName,
                  last_name: "",
-                 address: "Dirección POS"
+                 address: "Dirección POS",
+                 accepts_marketing: acceptsMarketing
              }, config);
              finalClientId = resClient.data.client_id;
          } catch (err) {
@@ -287,7 +495,9 @@ function POS() {
 
       const salePayload = {
         store_id: parseInt(storeId), 
-        payment_method: "Efectivo",
+        payment_method: paymentMethod,
+        payment_reference: paymentMethod !== 'Efectivo' ? paymentReference : null,
+        amount_received: paymentMethod === 'Efectivo' ? parseFloat(amountReceived || netTotal) : netTotal,
         client_dni: clientDni || null,
         client_id: finalClientId, 
         
@@ -299,6 +509,9 @@ function POS() {
         // Fidelización
         points_used: pointsUsed,
         points_discount_amount: pointsMoney,
+
+        // Promoción
+        promotion_id: appliedCouponId,
         
         items: cart.map(item => ({
           product_id: item.id, 
@@ -329,6 +542,12 @@ function POS() {
       setNeedsApproval(false);
       setPointsUsed(0);
       setPointsMoney(0);
+      setCouponCode('');
+      setAppliedCouponId(null);
+      
+      setPaymentDialogOpen(false);
+      setPaymentReference('');
+      setAmountReceived('');
       
       fetchProducts(); 
 
@@ -343,7 +562,28 @@ function POS() {
   const filteredProducts = products.filter(product =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (product.sku && product.sku.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  ).sort((a, b) => {
+    // Productos agotados al final
+    if (a.stock <= 0 && b.stock > 0) return 1;
+    if (a.stock > 0 && b.stock <= 0) return -1;
+    return 0;
+  });
+
+  // --- SOPORTE PARA LECTOR DE CÓDIGO DE BARRAS ---
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter' && searchTerm.trim() !== '') {
+      e.preventDefault();
+      // Buscamos coincidencia exacta de SKU primero
+      const exactMatch = filteredProducts.find(p => p.sku && p.sku.toLowerCase() === searchTerm.trim().toLowerCase());
+      if (exactMatch) {
+         handleProductClick(exactMatch);
+         setSearchTerm('');
+      } else if (filteredProducts.length === 1) {
+         handleProductClick(filteredProducts[0]);
+         setSearchTerm('');
+      }
+    }
+  };
 
   return (
     <Layout disablePadding>
@@ -353,14 +593,24 @@ function POS() {
           {/* --- COLUMNA IZQUIERDA (CATÁLOGO) --- */}
           <Box sx={{ width: { xs: '60%', md: '70%' }, p: 2, display: 'flex', flexDirection: 'column' }}>
             
-            <Paper elevation={0} sx={{ p: 2, mb: 2, display: 'flex', alignItems: 'center', borderRadius: 2, bgcolor: 'background.paper' }}>
-              <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} />
-              <TextField
-                inputRef={searchInputRef}
-                fullWidth variant="standard" placeholder="Buscar producto..."
-                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
-                InputProps={{ disableUnderline: true }}
-              />
+            <Paper elevation={0} sx={{ p: 2, mb: 2, display: 'flex', alignItems: 'center', borderRadius: 2, bgcolor: 'background.paper', justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
+                <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} />
+                <TextField
+                  inputRef={searchInputRef}
+                  fullWidth variant="standard" placeholder="Buscar por Nombre / Lector de Lcódigo de barras..."
+                  value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  InputProps={{ disableUnderline: true }}
+                  autoFocus
+                />
+              </Box>
+              <Box sx={{ display: { xs: 'none', lg: 'flex' }, gap: 1, ml: 2 }}>
+                <Chip label="F1 Cobrar" size="small" variant="outlined" />
+                <Chip label="F2 Buscar" size="small" variant="outlined" />
+                <Chip label="F3 Cliente" size="small" variant="outlined" />
+                <Chip label="ESC Limpiar" size="small" variant="outlined" />
+              </Box>
             </Paper>
 
             <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
@@ -403,7 +653,7 @@ function POS() {
                         
                         <Box sx={{ mt: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Typography variant="body1" color="primary" fontWeight="bold">
-                            S/ {Number(prod.base_price).toFixed(2)}
+                            {formatCurrency(prod.base_price)}
                           </Typography>
                           {prod.stock > 0 ? (
                              <Chip label={`Stock: ${prod.stock}`} size="small" color="success" variant="outlined" sx={{ fontSize: '0.7rem', height: 20 }} />
@@ -426,7 +676,19 @@ function POS() {
               
               <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Typography variant="h6" fontWeight="bold"><ShoppingCartIcon sx={{ verticalAlign: 'middle', mr: 1 }} /> Ticket</Typography>
-                <Chip label={`${cart.length} Items`} size="small" sx={{ bgcolor: 'background.paper', color: 'primary.main', fontWeight: 'bold' }} />
+                <Box display="flex" gap={1} alignItems="center">
+                  {cart.length > 0 && (
+                    <Button size="small" color="inherit" onClick={suspendCurrentSale} sx={{ border: '1px outset rgba(255,255,255,0.4)', borderRadius: 1.5, minWidth: '40px', px: 1 }}>
+                        <PauseIcon fontSize="small"/> 
+                    </Button>
+                  )}
+                  {suspendedSales.length > 0 && (
+                    <Button size="small" color="warning" variant="contained" onClick={() => setSuspendedDialogOpen(true)} sx={{ borderRadius: 1.5, minWidth: '40px', px: 1, boxShadow: 2 }}>
+                        <ListAltIcon fontSize="small"/> {suspendedSales.length}
+                    </Button>
+                  )}
+                  <Chip label={`${cart.length} Items`} size="small" sx={{ bgcolor: 'background.paper', color: 'primary.main', fontWeight: 'bold' }} />
+                </Box>
               </Box>
 
               {/* LISTA DE ITEMS */}
@@ -464,6 +726,7 @@ function POS() {
                   <TextField
                     label="DNI Cliente (Enter para buscar)" variant="outlined" size="small" fullWidth
                     value={clientDni} onChange={(e) => setClientDni(e.target.value)}
+                    inputRef={clientInputRef}
                     onKeyDown={handleSearchClient}
                     InputProps={{ 
                         startAdornment: (<InputAdornment position="start"><PersonIcon fontSize="small" /></InputAdornment>),
@@ -472,8 +735,30 @@ function POS() {
                     sx={{ bgcolor: 'background.paper', mb: 1 }}
                   />
                   
-                  {/* VISUALIZACIÓN DE NOMBRE Y PUNTOS */}
-                  {clientName && (
+                  {/* VISUALIZACIÓN DE NOMBRE MANUAL */}
+                  {isManualClient && (
+                      <Box sx={{ p: 1, bgcolor: 'background.paper', borderRadius: 1, border: 1, borderColor: 'warning.main' }}>
+                          <TextField
+                              label="Nombre de Cliente Manual" variant="outlined" size="small" fullWidth
+                              value={clientName} onChange={(e) => setClientName(e.target.value.toUpperCase())}
+                              autoFocus
+                              placeholder="Ej: JUAN PEREZ"
+                              sx={{ mb: 1 }}
+                          />
+                          <Box>
+                              <Typography variant="caption" color="success.main">✨ Nuevo (Se registrará al cobrar)</Typography>
+                              <Box mt={0.5}>
+                                  <FormControlLabel
+                                      control={<Checkbox size="small" checked={acceptsMarketing} onChange={(e) => setAcceptsMarketing(e.target.checked)} color="primary" />}
+                                      label={<Typography variant="caption" color="text.secondary">Autoriza promociones (Ley N° 29733)</Typography>}
+                                  />
+                              </Box>
+                          </Box>
+                      </Box>
+                  )}
+
+                  {/* VISUALIZACIÓN DE NOMBRE Y PUNTOS (AUTOMÁTICO) */}
+                  {clientName && !isManualClient && (
                       <Box sx={{ p: 1, bgcolor: 'background.paper', borderRadius: 1, border: 1, borderColor: 'primary.light' }}>
                           <Typography variant="subtitle2" color="primary" fontWeight="bold" noWrap>{clientName}</Typography>
                           {clientId ? (
@@ -482,7 +767,15 @@ function POS() {
                                   <Typography variant="caption" fontWeight="bold">{clientPoints} Puntos</Typography>
                               </Box>
                           ) : (
-                              <Typography variant="caption" color="success.main">✨ Nuevo (Se registrará al cobrar)</Typography>
+                              <Box>
+                                  <Typography variant="caption" color="success.main">✨ Nuevo (Se registrará al cobrar)</Typography>
+                                  <Box mt={0.5}>
+                                      <FormControlLabel
+                                          control={<Checkbox size="small" checked={acceptsMarketing} onChange={(e) => setAcceptsMarketing(e.target.checked)} color="primary" />}
+                                          label={<Typography variant="caption" color="text.secondary">Autoriza promociones (Ley N° 29733)</Typography>}
+                                      />
+                                  </Box>
+                              </Box>
                           )}
                       </Box>
                   )}
@@ -492,15 +785,15 @@ function POS() {
                   {/* SUBTOTAL, DESCUENTO Y TOTAL */}
                   <Box sx={{ mb: 2 }}>
                     <Box display="flex" justifyContent="space-between" mb={0.5}>
-                      <Typography variant="body2" color="text.secondary">Subtotal:</Typography>
-                      <Typography variant="body2">S/ {total.toFixed(2)}</Typography>
+                      <Typography variant="body2">Subtotal:</Typography>
+                      <Typography variant="body2">{formatCurrency(total)}</Typography>
                     </Box>
                     
                     {/* Visualización de Descuento Normal */}
                     {discountAmount > 0 && (
                       <Box display="flex" justifyContent="space-between" mb={0.5}>
                         <Typography variant="body2" color="error.main">
-                          Descuento ({discountType === 'PERCENTAGE' ? `${discountValue}%` : 'Fijo'}):
+                          {appliedCouponId ? 'Cupón Promocional:' : `Descuento (${discountType === 'PERCENTAGE' ? `${discountValue}%` : 'Fijo'}):`}
                         </Typography>
                         <Typography variant="body2" color="error.main" fontWeight="bold">
                           -S/ {discountAmount.toFixed(2)}
@@ -523,9 +816,30 @@ function POS() {
                     <Box display="flex" justifyContent="space-between" mt={1}>
                       <Typography variant="h6" color="text.secondary">TOTAL:</Typography>
                       <Typography variant="h4" color="success.main" fontWeight="bold">
-                        S/ {netTotal.toFixed(2)}
+                        {formatCurrency(netTotal)}
                       </Typography>
                     </Box>
+                  </Box>
+
+                  {/* MÓDULO CUPONES / PROMOCIONES */}
+                  <Box display="flex" gap={1} mb={2}>
+                     <TextField 
+                        size="small" 
+                        fullWidth 
+                        placeholder="Código de Descuento"
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                        disabled={appliedCouponId !== null || cart.length === 0}
+                     />
+                     {appliedCouponId ? (
+                        <Button color="error" variant="contained" onClick={handleRemoveCoupon} size="small" sx={{ minWidth: "80px" }}>
+                           Quitar
+                        </Button>
+                     ) : (
+                        <Button color="primary" variant="contained" onClick={handleValidateCoupon} disabled={!couponCode || isVerifyingCoupon || cart.length === 0} size="small" sx={{ minWidth: "80px" }}>
+                           {isVerifyingCoupon ? "..." : "Aplicar"}
+                        </Button>
+                     )}
                   </Box>
 
                   {/* BOTÓN PUNTOS (SOLO SI TIENE PUNTOS) */}
@@ -545,7 +859,7 @@ function POS() {
                       </Button>
                   )}
 
-                  {/* BOTÓN DESCUENTO */}
+                  {/* BOTÓN DESCUENTO NORMAL */}
                   <Button 
                     variant="outlined" 
                     color="warning" 
@@ -553,25 +867,55 @@ function POS() {
                     size="small"
                     startIcon={<DiscountIcon />}
                     onClick={() => setDiscountDialogOpen(true)}
-                    disabled={cart.length === 0}
+                    disabled={cart.length === 0 || appliedCouponId !== null} // Bloqueado si hay cupón activo
                     sx={{ mb: 1 }}
                   >
-                    {discountAmount > 0 ? `Descuento: -S/ ${discountAmount.toFixed(2)}` : 'Aplicar Descuento Normal'}
+                    {discountAmount > 0 && !appliedCouponId ? `Descuento Manual: -S/ ${discountAmount.toFixed(2)}` : 'Aplicar Descuento Manual'}
                   </Button>
                   
                   <Grid container spacing={1} mb={2}>
-                     <Grid item xs={4}><Button variant="outlined" fullWidth size="small"><AttachMoneyIcon/></Button></Grid>
-                     <Grid item xs={4}><Button variant="outlined" fullWidth size="small"><CreditCardIcon/></Button></Grid>
-                     <Grid item xs={4}><Button variant="outlined" fullWidth size="small"><QrCodeIcon/></Button></Grid>
+                     <Grid item xs={4}>
+                       <Button variant="outlined" fullWidth size="small" onClick={() => handleCheckoutAttempt('Efectivo')} sx={{ textTransform: 'none' }}>
+                         <AttachMoneyIcon fontSize="small" sx={{ mr: 0.5 }}/> EFECTIVO
+                       </Button>
+                     </Grid>
+                     <Grid item xs={4}>
+                       <Button variant="outlined" fullWidth size="small" onClick={() => handleCheckoutAttempt('Tarjeta')} sx={{ textTransform: 'none' }}>
+                         <CreditCardIcon fontSize="small" sx={{ mr: 0.5 }}/> TARJETA
+                       </Button>
+                     </Grid>
+                     <Grid item xs={4}>
+                       <Button variant="outlined" fullWidth size="small" onClick={() => handleCheckoutAttempt('Yape')} sx={{ textTransform: 'none' }}>
+                         <QrCodeIcon fontSize="small" sx={{ mr: 0.5 }}/> YAPE/PLIN
+                       </Button>
+                     </Grid>
                   </Grid>
 
                   <Button 
                       variant="contained" color="success" fullWidth size="large" 
                       disabled={cart.length === 0 || loadingSale} 
-                      onClick={handlePay}
+                      onClick={() => handleCheckoutAttempt('Efectivo')}
                   >
-                      {loadingSale ? "PROCESANDO..." : `COBRAR S/ ${netTotal.toFixed(2)}`}
+                      {loadingSale ? "PROCESANDO..." : `COBRAR S/ ${formatCurrency(netTotal)}`}
                   </Button>
+
+                  {/* LEYENDA ATAJOS */}
+                  <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+                    {[
+                      { key: 'F1', label: 'Cobrar' },
+                      { key: 'F2', label: 'Buscar' },
+                      { key: 'F3', label: 'Cliente' },
+                      { key: 'ESC', label: 'Limpiar' },
+                    ].map(s => (
+                      <Chip
+                        key={s.key}
+                        label={`${s.key} ${s.label}`}
+                        size="small"
+                        variant="outlined"
+                        sx={{ fontSize: '0.65rem', height: 22 }}
+                      />
+                    ))}
+                  </Box>
                 </Box>
               </Box>
             </Paper>
@@ -754,6 +1098,95 @@ function POS() {
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* MODAL COBRANZA Y VUELTO (TIER 3) */}
+      <Dialog open={paymentDialogOpen} onClose={() => setPaymentDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ bgcolor: 'success.main', color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <AttachMoneyIcon /> {paymentMethod === 'Efectivo' ? 'Cobrar en Efectivo' : `Cobrar con ${paymentMethod}`}
+        </DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
+           <Typography variant="h2" align="center" color="success.main" fontWeight="bold" sx={{ mt: 2, mb: 1 }}>
+              S/ {netTotal.toFixed(2)}
+           </Typography>
+           <Typography variant="body1" align="center" color="text.secondary" gutterBottom>
+              Total a Pagar
+           </Typography>
+           
+           <Divider sx={{ my: 3 }} />
+
+           {paymentMethod === 'Efectivo' ? (
+              <Box>
+                <TextField 
+                   fullWidth label="Monto Recibido del Cliente (S/)" type="number" 
+                   autoFocus
+                   value={amountReceived} 
+                   onChange={(e) => setAmountReceived(e.target.value)}
+                   InputProps={{ startAdornment: <InputAdornment position="start">S/</InputAdornment> }}
+                />
+                {(amountReceived && parseFloat(amountReceived) >= netTotal) ? (
+                   <Typography variant="h5" align="center" color="primary.main" fontWeight="bold" sx={{ mt: 3 }}>
+                     Vuelto: S/ {(parseFloat(amountReceived) - netTotal).toFixed(2)}
+                   </Typography>
+                ) : (
+                   <Typography variant="body2" align="center" color="error.main" sx={{ mt: 2 }}>
+                     Ingrese un monto mayor o igual al total a pagar
+                   </Typography>
+                )}
+              </Box>
+           ) : (
+              <Box>
+                <TextField 
+                   fullWidth label="N° de Operación o Referencia" type="text"
+                   autoFocus
+                   value={paymentReference} 
+                   onChange={(e) => setPaymentReference(e.target.value)}
+                   required
+                />
+              </Box>
+           )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setPaymentDialogOpen(false)} color="inherit">Cancelar</Button>
+          <Button 
+            variant="contained" color="success" onClick={handlePay} size="large"
+            disabled={
+              loadingSale || 
+              (paymentMethod === 'Efectivo' && (!amountReceived || parseFloat(amountReceived) < netTotal)) ||
+              (paymentMethod !== 'Efectivo' && !paymentReference.trim())
+            }
+          >
+             {loadingSale ? "PROCESANDO..." : "CONFIRMAR PAGO"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* MODAL LISTA DE SUSPENDIDAS (TIER 3) */}
+      <Dialog open={suspendedDialogOpen} onClose={() => setSuspendedDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ bgcolor: 'warning.main', color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ListAltIcon /> Ventas Suspendidas ({suspendedSales.length})
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          <List>
+            {suspendedSales.length === 0 && <ListItem><Typography color="text.secondary">No hay ventas suspendidas.</Typography></ListItem>}
+            {suspendedSales.map(sale => (
+               <ListItem key={sale.id} divider>
+                 <ListItemText 
+                    primary={`Venta de: ${sale.clientName || 'PÚBLICO GENERAL'} - S/ ${sale.netTotal.toFixed(2)}`}
+                    secondary={`Suspendida a las ${sale.date} | ${sale.cart.length} items en carrito`}
+                 />
+                 <Button variant="outlined" color="primary" onClick={() => resumeSuspendedSale(sale)} sx={{ mr: 1 }}>Retomar</Button>
+                 <IconButton onClick={() => setSuspendedSales(suspendedSales.filter(s => s.id !== sale.id))} color="error">
+                    <DeleteIcon />
+                 </IconButton>
+               </ListItem>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+           <Button onClick={() => setSuspendedDialogOpen(false)}>Cerrar</Button>
+        </DialogActions>
+      </Dialog>
+
     </Layout>
   );
 }

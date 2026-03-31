@@ -111,6 +111,14 @@ def close_cash_register(
 
     expected = register.start_amount + float(cash_sales) + float(movements_sum)
 
+    # 1.5. Validar Diferencia (Tier 3)
+    difference = request.final_amount_real - expected
+    if abs(difference) > 10.0 and (not request.notes or request.notes.strip() == ""):
+        raise HTTPException(
+            status_code=400, 
+            detail="⚠️ OBLIGATORIO: La diferencia de caja supera los S/ 10.00. Debe escribir una justificación en las Observaciones."
+        )
+
     # 2. Actualizar registro
     register.end_time = datetime.now()
     register.status = CashStatus.CLOSED
@@ -160,6 +168,7 @@ def get_cash_history(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     user_id: Optional[int] = None,
+    store_id: Optional[int] = None,
     limit: int = 50,
     skip: int = 0,
     db: Session = Depends(get_db),
@@ -168,19 +177,13 @@ def get_cash_history(
     """
     Historial de cierres de caja.
     Filtros opcionales: Rango de fechas, usuario específico.
-    Solo Admin puede ver historial de todos (o implementar lógica de permisos).
+    Admins pueden ver historial de otra tienda pasando store_id.
     """
-    # Si no es admin, forzar user_id al propio? (Opcional, segun requerimiento "Auditoria" suele ser para admins)
-    # Por ahora permitimos ver todo si es admin, o solo lo suyo si es empleado (si se quisiera).
-    # Asumiremos que esta vista es protegida en frontend para Admin.
+    effective_store_id = store_id if store_id is not None else current_user.store_id
 
     query = db.query(CashRegister).options(joinedload(CashRegister.user)).order_by(desc(CashRegister.start_time))
 
-    # 1. Filtro Mandatorio: Solo ver cajas de MI TIENDA (Aislamiento)
-    # Asumimos que el usuario solo puede auditar su propia tienda.
-    # Si fuera SuperAdmin global, podríamos hacer un if role == 'superadmin'.
-    # Dado el requerimiento "admin2 NO debe ver tienda 1", aplicamos filtro estricto.
-    query = query.filter(CashRegister.store_id == current_user.store_id)
+    query = query.filter(CashRegister.store_id == effective_store_id)
 
     if user_id:
         query = query.filter(CashRegister.user_id == user_id)

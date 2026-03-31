@@ -1,0 +1,139 @@
+
+
+
+
+
+
+SMART PE
+Guía de Tienda Web / E-Commerce
+Escenarios, Requisitos y Posibles Errores
+
+
+Versión 1.0 — Marzo 2026
+
+Índice
+1. ¿Qué es la tienda web y por qué la necesitas?
+2. ¿Qué ya tenemos listo en el backend?
+3. ¿Qué falta construir?
+4. Arquitectura técnica propuesta
+5. Módulos de la tienda web
+6. Pasarela de pagos (cómo cobrar online)
+7. Escenarios de uso real
+8. Posibles errores y soluciones
+9. Checklist antes de lanzar la tienda web
+10. Cronograma estimado de desarrollo
+
+1. ¿Qué es la tienda web y por qué la necesitas?
+La tienda web (e-commerce) es la cara pública del negocio de tu cliente en internet. Es una página web donde los clientes finales (consumidores) pueden:
+Ver el catálogo completo de productos con fotos, precios y disponibilidad.
+Agregar productos al carrito de compras.
+Pagar en línea con tarjeta, Yape, Plin o transferencia.
+Recibir confirmación de pedido por email o WhatsApp.
+Elegir entre envío a domicilio o recojo en tienda.
+Esto complementa perfectamente tu sistema ERP/POS actual: el POS atiende clientes presenciales en tienda, y la web atiende clientes online. Ambos comparten el mismo inventario, la misma base de datos de productos, y los mismos clientes.
+¿Es indispensable para vender el sistema?
+No es obligatorio, pero es un diferenciador ENORME. Si le dices a tu cliente: 'Además de tu POS en tienda, también tendrás tu propia tienda web donde tus clientes pueden comprar 24/7', el valor percibido de tu producto se duplica. Es la diferencia entre cobrar S/3,000 y cobrar S/6,000-8,000 por implementación.
+2. ¿Qué ya tenemos listo en el backend?
+Esto significa que el 70% del trabajo de backend ya está hecho. Solo necesitamos agregar endpoints públicos (sin autenticación) para que la web consulte productos y procese pedidos.
+
+3. ¿Qué falta construir?
+En el Backend (API):
+En el Frontend (Página web pública):
+
+4. Arquitectura técnica propuesta
+La tienda web sería una aplicación SEPARADA del panel de administración:
+• Panel Admin (ya existe): http://admin.smartpe-tienda.com
+  → Solo accesible para dueños, cajeros, administradores (con login).
+
+• Tienda Web (nueva): http://www.smartpe-tienda.com
+  → Accesible para CUALQUIER persona en internet (sin login para comprar).
+  → También puede tener registro/login opcional para historial de pedidos.
+
+• Backend API (ya existe): http://api.smartpe-tienda.com
+  → Sirve tanto al panel admin como a la tienda web.
+  → Endpoints privados (/sales, /inventory) requieren token.
+  → Endpoints públicos (/shop/*) no requieren token.
+Opciones de tecnología para la tienda web:
+Recomendación: Para empezar, usa React + Vite (la misma tecnología que ya manejas). Es lo más rápido. Si en el futuro necesitas mejor posicionamiento en Google (SEO), puedes migrar a Next.js.
+
+5. Módulos de la tienda web
+5.1 Catálogo de productos
+El catálogo muestra los productos disponibles con foto, nombre, precio y stock. Al hacer clic se abre el detalle con descripción completa.
+Los productos se sincronizan en tiempo real con el inventario del POS.
+Si un producto se agota en tienda física, también se muestra agotado en la web.
+Filtros: por categoría, rango de precio, disponibilidad, y búsqueda por texto.
+5.2 Carrito de compras
+El carrito funciona igual que en cualquier tienda online. El comprador agrega productos, ajusta cantidades y ve el total antes de pagar.
+Se guarda en localStorage del navegador (no requiere login para agregar).
+Al momento de pagar, se valida que el stock siga disponible.
+Se descuenta el stock solo cuando el pago es confirmado.
+5.3 Checkout y pasarela de pagos
+El checkout es donde el comprador ingresa sus datos (nombre, DNI, dirección) y selecciona la forma de pago.
+5.4 Gestión de pedidos
+Cada compra online genera un 'pedido' (order) con estados: PENDIENTE → PAGADO → EN PREPARACIÓN → ENVIADO → ENTREGADO.
+El dueño de la tienda ve los pedidos nuevos en su panel de administración.
+Puede marcar pedidos como 'preparados' o 'enviados'.
+El comprador recibe notificaciones del estado de su pedido.
+
+6. Pasarela de pagos (cómo cobrar online)
+Para recibir pagos por internet necesitas integrar una pasarela de pagos. Estas son las opciones disponibles en Perú:
+Datos que el cliente necesita para activar pagos online:
+→ RUC activo y habido en SUNAT.
+→ Cuenta bancaria empresarial (BCP, BBVA, Interbank, etc.).
+→ Correo empresarial para notificaciones.
+→ Documento de identidad del representante legal.
+⚠️ IMPORTANTE: La pasarela de pagos cobra comisión POR CADA transacción. Este costo lo asume el dueño de la tienda (tu cliente), no tú. Déjalo claro desde el principio.
+Flujo completo de un pago online:
+1. Comprador llena formulario de checkout y hace clic en 'Pagar'.
+2. Tu frontend redirige al formulario seguro de la pasarela (hosted checkout).
+3. El comprador ingresa su tarjeta o escanea QR de Yape.
+4. La pasarela procesa el cobro y notifica a tu backend (webhook).
+5. Tu backend marca el pedido como 'PAGADO' y descuenta stock.
+6. Se envía confirmación al comprador por email/WhatsApp.
+
+7. Escenarios de uso real
+Escenario A: Minimarket tipo Miniso con tienda web
+Ejemplo: 'Importaciones YoYoSo Perú' quiere que sus clientes puedan ver el catálogo de peluches, tazas, gadgets, etc. y comprar online con envío a domicilio.
+
+• Catálogo: ~500 productos con fotos.
+• Pagos: Yape, tarjeta Visa/MC vía MercadoPago.
+• Envío: coordinan con un courier (Olva, Shalom) o entrega a moto propia.
+• Recojo en tienda: opción disponible sin costo de envío.
+
+Valor agregado que ofreces: La tienda web se sincroniza en tiempo real con su POS. Si venden un peluche en la tienda física, el stock baja también en la web automáticamente (evita vender algo que ya no tienen).
+Escenario B: Ferretería con cotizador web
+Ejemplo: 'Ferretería Construmax' tiene clientes constructores que necesitan cotizaciones antes de comprar.
+
+• En su web verían el catálogo de materiales con precios.
+• Pueden armar una 'lista de compras' y solicitar cotización formal.
+• El ferretero recibe la solicitud, ajusta precios si es cliente frecuente, y envía la cotización por email.
+• Si el constructor acepta, se convierte en pedido y se despacha.
+
+En este caso, la web funciona más como un COTIZADOR que como tienda de pago instantáneo (las ferreterías grandes rara vez cobran con tarjeta online; prefieren transferencia bancaria o crédito a 30 días).
+Escenario C: Tienda de celulares con vitrina web
+Ejemplo: 'CelularesPerú' quiere mostrar sus modelos con precios y que los clientes reserven por WhatsApp.
+
+• La web muestra el catálogo con fotos, IMEI (parcial) y precios.
+• Botón de 'Consultar por WhatsApp' que abre chat directo con el vendedor.
+• No necesariamente pago online (los celulares se venden presencialmente).
+
+Este es el escenario más simple: la web es solo una vitrina/catálogo sin carrito ni pasarela de pagos.
+
+8. Posibles errores y soluciones
+
+9. Checklist antes de lanzar la tienda web
+☐ Endpoints públicos de catálogo funcionando sin autenticación
+☐ Upload de imágenes de productos implementado
+☐ Fotos de al menos el 90% de los productos cargadas
+☐ Carrito de compras funcional (agregar, quitar, modificar cantidad)
+☐ Pasarela de pagos integrada y probada en sandbox
+☐ Formulario de checkout con validación de datos
+☐ Gestión de pedidos visible en el panel de administración
+☐ Email/WhatsApp de confirmación al comprador
+☐ Certificado SSL (HTTPS) activo en el dominio
+☐ Diseño responsive (se ve bien en celular y escritorio)
+☐ Pruebas de compra completas con pagos reales de prueba
+☐ Página 'Nosotros' y datos de contacto del negocio
+☐ Política de devoluciones y términos de servicio
+10. Cronograma estimado de desarrollo
+Tiempo total estimado: 4-5 semanas de desarrollo para una tienda web completamente funcional con catálogo, carrito, pasarela de pagos y gestión de pedidos.

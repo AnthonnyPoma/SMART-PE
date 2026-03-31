@@ -10,7 +10,7 @@ import SaveIcon from '@mui/icons-material/Save';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 
-const API_URL = "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 function StockEntry() {
   const [products, setProducts] = useState([]);
@@ -27,6 +27,9 @@ function StockEntry() {
   
   const [currentImei, setCurrentImei] = useState("");
   const [serialsList, setSerialsList] = useState([]);
+  const [bulkMode, setBulkMode] = useState(false); // Toggle entre scan individual y pegado masivo
+  const [bulkText, setBulkText] = useState(""); // Texto del textarea masivo
+  const [bulkStats, setBulkStats] = useState(null); // Stats del último procesamiento
   
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
@@ -229,23 +232,109 @@ function StockEntry() {
 
                 {currentProd.is_serializable && (
                   <Box mt={2}>
-                    <Typography variant="subtitle2" gutterBottom>Escáner de IMEIs:</Typography>
-                    <TextField
-                      fullWidth placeholder="Escanea o escribe IMEI y presiona ENTER"
-                      value={currentImei}
-                      onChange={(e) => setCurrentImei(e.target.value)}
-                      onKeyDown={handleAddImei}
-                      sx={{ mb: 2 }}
-                    />
+                    {/* Toggle entre modos */}
+                    <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+                      <Typography variant="subtitle2">
+                        {bulkMode ? "📋 Pegado Masivo de IMEIs" : "📱 Escáner Individual"}
+                      </Typography>
+                      <Button 
+                        size="small" 
+                        variant="outlined"
+                        onClick={() => { setBulkMode(!bulkMode); setBulkStats(null); }}
+                      >
+                        {bulkMode ? "Cambiar a Escáner" : "Pegar Lista"}
+                      </Button>
+                    </Box>
+
+                    {!bulkMode ? (
+                      /* MODO INDIVIDUAL — Escanear uno por uno */
+                      <TextField
+                        fullWidth placeholder="Escanea o escribe IMEI y presiona ENTER"
+                        value={currentImei}
+                        onChange={(e) => setCurrentImei(e.target.value)}
+                        onKeyDown={handleAddImei}
+                        sx={{ mb: 2 }}
+                      />
+                    ) : (
+                      /* MODO MASIVO — Pegar lista */
+                      <Box>
+                        <TextField
+                          fullWidth multiline rows={5}
+                          placeholder={"Pega los IMEIs aquí (uno por línea, separados por coma, o tabulados desde Excel)\n\nEjemplo:\n350123456789012\n350123456789013\n350123456789014"}
+                          value={bulkText}
+                          onChange={(e) => setBulkText(e.target.value)}
+                          sx={{ mb: 1, fontFamily: 'monospace' }}
+                        />
+                        <Button 
+                          variant="contained" color="secondary" size="small"
+                          onClick={() => {
+                            // Parsear: soporta newline, coma, tab, punto y coma
+                            const raw = bulkText.split(/[\n,;\t]+/).map(s => s.trim()).filter(Boolean);
+                            const uniqueNew = [];
+                            const duplicatesInPaste = [];
+                            const duplicatesExisting = [];
+                            const invalid = [];
+                            
+                            raw.forEach(imei => {
+                              // Validar formato: solo dígitos, 15 caracteres (estándar IMEI)
+                              if (!/^\d{15}$/.test(imei) && imei.length > 0) {
+                                // Permitir IMEIs no estándar pero avisar
+                                if (imei.length < 8 || imei.length > 20) {
+                                  invalid.push(imei);
+                                  return;
+                                }
+                              }
+                              if (serialsList.includes(imei)) {
+                                duplicatesExisting.push(imei);
+                              } else if (uniqueNew.includes(imei)) {
+                                duplicatesInPaste.push(imei);
+                              } else {
+                                uniqueNew.push(imei);
+                              }
+                            });
+                            
+                            setSerialsList([...serialsList, ...uniqueNew]);
+                            setBulkText("");
+                            setBulkStats({
+                              added: uniqueNew.length,
+                              dupPaste: duplicatesInPaste.length,
+                              dupExisting: duplicatesExisting.length,
+                              invalid: invalid.length,
+                              total: raw.length
+                            });
+                          }}
+                          sx={{ mr: 1 }}
+                        >
+                          Procesar IMEIs
+                        </Button>
+                        {bulkStats && (
+                          <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                            ✅ {bulkStats.added} agregados
+                            {bulkStats.dupPaste > 0 && ` · ⚠️ ${bulkStats.dupPaste} duplicados en la lista`}
+                            {bulkStats.dupExisting > 0 && ` · ⚠️ ${bulkStats.dupExisting} ya estaban`}
+                            {bulkStats.invalid > 0 && ` · ❌ ${bulkStats.invalid} inválidos`}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+
+                    {/* Lista de IMEIs cargados (compartida por ambos modos) */}
                     <Box sx={{ maxHeight: 150, overflowY: 'auto', bgcolor: 'background.paper', p: 1, border: 1, borderColor: 'divider', borderRadius: 1 }}>
                       {serialsList.length === 0 && <Typography variant="caption" color="text.secondary">Lista vacía</Typography>}
                       {serialsList.map((code, index) => (
-                        <Chip key={index} label={code} onDelete={() => removeImei(code)} sx={{ m: 0.5 }} />
+                        <Chip key={index} label={code} onDelete={() => removeImei(code)} sx={{ m: 0.5 }} size="small" />
                       ))}
                     </Box>
-                    <Typography align="right" variant="caption" display="block" mt={1}>
-                      Total Leídos: {serialsList.length}
-                    </Typography>
+                    <Box display="flex" justifyContent="space-between" mt={1}>
+                      <Typography variant="caption" fontWeight="bold" color="primary.main">
+                        Total: {serialsList.length} IMEIs
+                      </Typography>
+                      {serialsList.length > 0 && (
+                        <Button size="small" color="error" onClick={() => { setSerialsList([]); setBulkStats(null); }}>
+                          Limpiar Todos
+                        </Button>
+                      )}
+                    </Box>
                   </Box>
                 )}
               </Box>

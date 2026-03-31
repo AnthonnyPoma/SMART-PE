@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.client_model import Client
+from app.models.user_model import User
+from app.dependencies import get_current_user
 from pydantic import BaseModel
 from typing import Optional
 from app.services.reniec_service import get_person_from_reniec
@@ -16,6 +18,7 @@ class ClientBase(BaseModel):
     email: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
+    accepts_marketing: bool = False
 
 class ClientCreate(ClientBase):
     pass
@@ -24,7 +27,7 @@ class ClientUpdate(ClientBase):
     pass
 
 @router.get("/search/{dni}")
-def search_client_reniec(dni: str, db: Session = Depends(get_db)):
+def search_client_reniec(dni: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # 1. Buscar en BD Local (Usando document_number)
     local_client = db.query(Client).filter(Client.document_number == dni).first()
     
@@ -53,7 +56,7 @@ def search_client_reniec(dni: str, db: Session = Depends(get_db)):
     raise HTTPException(status_code=404, detail="DNI no encontrado")
 
 @router.get("/", response_model=list[dict])
-def read_clients(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_clients(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     clients = db.query(Client).offset(skip).limit(limit).all()
     # Mapeamos a dict para asegurar compatibilidad si Pydantic estricto falla
     return [
@@ -71,8 +74,59 @@ def read_clients(skip: int = 0, limit: int = 100, db: Session = Depends(get_db))
         for c in clients
     ]
 
+@router.get("/paginated")
+def read_clients_paginated(
+    page: int = 1,
+    limit: int = 50,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Lista clientes con paginación y búsqueda servidor."""
+    import math
+    from sqlalchemy import or_
+    
+    query = db.query(Client)
+    
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                Client.first_name.ilike(search_term),
+                Client.last_name.ilike(search_term),
+                Client.document_number.ilike(search_term),
+                Client.phone.ilike(search_term)
+            )
+        )
+    
+    total_items = query.count()
+    total_pages = math.ceil(total_items / limit) if total_items > 0 else 1
+    
+    clients = query.order_by(Client.client_id.desc()).offset((page - 1) * limit).limit(limit).all()
+    
+    return {
+        "data": [
+            {
+                "client_id": c.client_id,
+                "document_type": c.document_type,
+                "document_number": c.document_number,
+                "first_name": c.first_name,
+                "last_name": c.last_name,
+                "email": c.email,
+                "phone": c.phone,
+                "address": c.address,
+                "current_points": c.current_points,
+                "accepts_marketing": c.accepts_marketing
+            }
+            for c in clients
+        ],
+        "page": page,
+        "total_pages": total_pages,
+        "total_items": total_items
+    }
+
 @router.post("/", response_model=dict)
-def create_client(client: ClientCreate, db: Session = Depends(get_db)):
+def create_client(client: ClientCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # Verificar si ya existe (Usando document_number)
     exists = db.query(Client).filter(Client.document_number == client.document_number).first()
     if exists:
@@ -86,6 +140,7 @@ def create_client(client: ClientCreate, db: Session = Depends(get_db)):
         email=client.email,
         phone=client.phone,
         address=client.address,
+        accepts_marketing=client.accepts_marketing,
         current_points=0
     )
     db.add(new_client)
@@ -94,7 +149,7 @@ def create_client(client: ClientCreate, db: Session = Depends(get_db)):
     return {"client_id": new_client.client_id, "message": "Cliente registrado"}
 
 @router.put("/{client_id}", response_model=dict)
-def update_client(client_id: int, client_data: ClientUpdate, db: Session = Depends(get_db)):
+def update_client(client_id: int, client_data: ClientUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     client = db.query(Client).filter(Client.client_id == client_id).first()
     if not client:
         raise HTTPException(status_code=404, detail="Cliente no encontrado")
@@ -106,6 +161,7 @@ def update_client(client_id: int, client_data: ClientUpdate, db: Session = Depen
     client.email = client_data.email
     client.phone = client_data.phone
     client.address = client_data.address
+    client.accepts_marketing = client_data.accepts_marketing
     
     db.commit()
     return {"message": "Cliente actualizado correctamente"}

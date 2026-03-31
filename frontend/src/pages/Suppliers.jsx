@@ -12,9 +12,7 @@ import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import BusinessIcon from '@mui/icons-material/Business';
 import PhoneIcon from '@mui/icons-material/Phone';
 import EmailIcon from '@mui/icons-material/Email';
-import axios from 'axios';
-
-const API_URL = "http://localhost:8000";
+import api from '../api/axios';
 
 function Suppliers() {
   const [suppliers, setSuppliers] = useState([]);
@@ -32,18 +30,18 @@ function Suppliers() {
     is_active: true
   });
 
-  useEffect(() => {
-    fetchSuppliers();
-  }, []);
-
   const fetchSuppliers = async () => {
     try {
-      const res = await axios.get(`${API_URL}/suppliers/`);
+      const res = await api.get(`/suppliers/`);
       setSuppliers(res.data);
     } catch (error) {
       console.error("Error cargando proveedores:", error);
     }
   };
+
+  useEffect(() => {
+    fetchSuppliers();
+  }, []);
 
   const handleOpen = (supplier = null) => {
     if (supplier) {
@@ -61,12 +59,13 @@ function Suppliers() {
   const handleSave = async () => {
     try {
       if (isEdit) {
-        await axios.put(`${API_URL}/suppliers/${formData.supplier_id}`, formData);
+        await api.put(`/suppliers/${formData.supplier_id}`, formData);
       } else {
-        await axios.post(`${API_URL}/suppliers/`, formData);
+        await api.post(`/suppliers/`, formData);
       }
       setOpen(false);
       fetchSuppliers();
+
     } catch (error) {
       alert("Error al guardar: " + (error.response?.data?.detail || error.message));
     }

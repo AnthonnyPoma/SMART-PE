@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Layout from '../components/Layout';
-import api from '../api/axios'; // 👈 USAR CLIENTE SEGURO
+import api from '../api/axios';
 import { useNavigate } from 'react-router-dom';
 
 // const API_URL = "http://localhost:8000"; // No longer needed if api client handles base URL
@@ -305,7 +305,7 @@ function TransferRequest() {
                         <TableContainer>
                             <Table size="small">
                                 <TableHead>
-                                    <TableRow sx={{ bgcolor: 'grey.100' }}>
+                                    <TableRow sx={{ bgcolor: 'action.hover' }}>
                                         <TableCell>Producto</TableCell>
                                         <TableCell>IMEI / Serie</TableCell>
                                         <TableCell align="center">Cant.</TableCell>

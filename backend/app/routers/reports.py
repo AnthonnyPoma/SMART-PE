@@ -31,7 +31,7 @@ def get_sales_summary(
     current_user: User = Depends(get_current_user)
 ):
     # Si no es admin/superadmin, forzar store_id del usuario
-    if current_user.role not in ["admin", "superadmin"] and current_user.store_id:
+    if current_user.role.name not in ["admin", "superadmin"] and current_user.store_id:
         store_id = current_user.store_id
     
     # Query Base
@@ -151,7 +151,7 @@ def get_top_products(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role not in ["admin", "superadmin"] and current_user.store_id:
+    if current_user.role.name not in ["admin", "superadmin"] and current_user.store_id:
         store_id = current_user.store_id
 
     query = db.query(
@@ -196,7 +196,7 @@ def get_sales_by_category(
 ):
     # from app.models.category_model import Category # Importación diferida
 
-    if current_user.role not in ["admin", "superadmin"] and current_user.store_id:
+    if current_user.role.name not in ["admin", "superadmin"] and current_user.store_id:
         store_id = current_user.store_id
 
     query = db.query(
@@ -231,7 +231,7 @@ def get_payment_methods_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role not in ["admin", "superadmin"] and current_user.store_id:
+    if current_user.role.name not in ["admin", "superadmin"] and current_user.store_id:
         store_id = current_user.store_id
 
     # Usamos SalePayment para mayor precisión si existe, sino fallback a Sale si guardas el método ahí
@@ -293,7 +293,7 @@ def get_sales_by_seller(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role not in ["admin", "superadmin"] and current_user.store_id:
+    if current_user.role.name not in ["admin", "superadmin"] and current_user.store_id:
         store_id = current_user.store_id
 
     query = db.query(
@@ -321,7 +321,7 @@ def get_sales_by_seller(
     ]
 
 # ==========================================
-# 📦 6. ANALÍTICA DE INVENTARIO (Extra Auditoría)
+# 6. Analítica de inventario
 # ==========================================
 @router.get("/inventory-valuation")
 def get_inventory_valuation(
@@ -329,7 +329,7 @@ def get_inventory_valuation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role not in ["admin", "superadmin"] and current_user.store_id:
+    if current_user.role.name not in ["admin", "superadmin"] and current_user.store_id:
         store_id = current_user.store_id
 
     # Calcular valorizado: Suma de (Stock * Costo Promedio)
@@ -374,7 +374,7 @@ def get_low_rotation_products(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role not in ["admin", "superadmin"] and current_user.store_id:
+    if current_user.role.name not in ["admin", "superadmin"] and current_user.store_id:
         store_id = current_user.store_id
         
     # Estrategia:
@@ -434,7 +434,7 @@ def get_sales_by_hour(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role not in ["admin", "superadmin"] and current_user.store_id:
+    if current_user.role.name not in ["admin", "superadmin"] and current_user.store_id:
         store_id = current_user.store_id
 
     # Extraer hora de la fecha de creación
@@ -472,3 +472,58 @@ def get_sales_by_hour(
         })
         
     return final_data
+
+# ==========================================
+# 📊 COMPARATIVA DE TIENDAS
+# ==========================================
+@router.get("/stores-comparison")
+def get_stores_comparison(
+    start_date: date,
+    end_date: date,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Compara métricas de ventas entre todas las tiendas."""
+    from app.models.store_model import Store
+    
+    stores = db.query(Store).filter(Store.status == True).all()
+    end_datetime = datetime.combine(end_date, datetime.max.time())
+    
+    result = []
+    for store in stores:
+        sales = db.query(Sale).filter(
+            Sale.store_id == store.store_id,
+            Sale.sunat_status != 'ANULADO',
+            Sale.date_created >= start_date,
+            Sale.date_created <= end_datetime
+        ).all()
+        
+        total_amount = sum(float(s.total_amount or 0) for s in sales)
+        count = len(sales)
+        avg_ticket = total_amount / count if count > 0 else 0
+        
+        # Top producto por tienda
+        product_sales = {}
+        for s in sales:
+            for d in s.details:
+                pid = d.product_id
+                product_sales[pid] = product_sales.get(pid, 0) + float(d.subtotal or 0)
+        
+        top_product_name = None
+        if product_sales:
+            top_pid = max(product_sales, key=product_sales.get)
+            top_prod = db.query(Product).filter(Product.product_id == top_pid).first()
+            top_product_name = top_prod.name if top_prod else "Desconocido"
+        
+        result.append({
+            "store_id": store.store_id,
+            "store_name": store.name,
+            "total_sales": round(total_amount, 2),
+            "transaction_count": count,
+            "avg_ticket": round(avg_ticket, 2),
+            "top_product": top_product_name
+        })
+    
+    # Ordenar por ventas desc
+    result.sort(key=lambda x: x["total_sales"], reverse=True)
+    return result

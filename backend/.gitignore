@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+smart_pe_db_dump.sql

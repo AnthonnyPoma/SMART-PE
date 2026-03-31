@@ -12,7 +12,7 @@ export const AuthProvider = ({ children }) => {
     const parseJwt = (token) => {
         try {
             return JSON.parse(atob(token.split('.')[1]));
-        } catch (e) {
+        } catch {
             return null;
         }
     };
@@ -29,12 +29,18 @@ export const AuthProvider = ({ children }) => {
         const token = localStorage.getItem('token');
         if (token) {
             const decoded = parseJwt(token);
-            if (decoded) {
-                // Verificar expiración si fuera necesario
+            const now = Date.now() / 1000;
+            if (decoded && decoded.exp && decoded.exp > now) {
                 setUser(decoded);
                 setIsAuthenticated(true);
             } else {
-                logout();
+                // Token expirado o inválido → limpiar sin llamar a setState en cascada
+                localStorage.removeItem('token');
+                localStorage.removeItem('username');
+                localStorage.removeItem('role');
+                localStorage.removeItem('store_id');
+                localStorage.removeItem('store_name');
+                localStorage.removeItem('full_name');
             }
         }
         setLoading(false);
