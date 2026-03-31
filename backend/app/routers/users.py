@@ -5,10 +5,9 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.models.user_model import User
 from app.schemas.user_schema import UserCreate, UserResponse 
-from passlib.context import CryptContext
+from app.core.security import get_password_hash
 from sqlalchemy import text
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 router = APIRouter()
 
 # --- SCHEMA AUXILIAR PARA ACTUALIZAR ---
@@ -30,9 +29,6 @@ class RoleResponse(BaseModel):
     name: str
     class Config:
         from_attributes = True
-
-def get_password_hash(password):
-    return pwd_context.hash(password)
 
 from app.dependencies import get_current_user # Importar dependencia
 
