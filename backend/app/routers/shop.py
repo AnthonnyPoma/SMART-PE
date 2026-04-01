@@ -95,55 +95,60 @@ def get_product_detail(product_id: int, db: Session = Depends(get_db)):
 
 @router.post("/checkout")
 def process_web_checkout(req: CheckoutRequest, db: Session = Depends(get_db)):
-    if not req.items:
-        raise HTTPException(status_code=400, detail="El carrito está vacío")
+    try:
+        if not req.items:
+            raise HTTPException(status_code=400, detail="El carrito está vacío")
 
-    total_amount = 0
-    order_items = []
+        total_amount = 0
+        order_items = []
 
-    # Validar stock y calcular total
-    for item in req.items:
-        product = db.query(product_model.Product).filter(product_model.Product.product_id == item.product_id).first()
-        if not product:
-            raise HTTPException(status_code=404, detail=f"Producto con ID {item.product_id} no encontrado")
-        
-        # Aquí idealmente consultaríamos Inventory para ver stock real.
-        # Por ahora asumimos que hay stock y solo tomamos el precio
-        subtotal = float(product.base_price) * item.quantity
-        total_amount += subtotal
+        # Validar stock y calcular total
+        for item in req.items:
+            product = db.query(product_model.Product).filter(product_model.Product.product_id == item.product_id).first()
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Producto con ID {item.product_id} no encontrado")
+            
+            subtotal = float(product.base_price) * item.quantity
+            total_amount += subtotal
 
-        order_items.append(
-            web_order_model.WebOrderItem(
-                product_id=product.product_id,
-                quantity=item.quantity,
-                unit_price=product.base_price,
-                subtotal=subtotal
+            order_items.append(
+                web_order_model.WebOrderItem(
+                    product_id=product.product_id,
+                    quantity=item.quantity,
+                    unit_price=product.base_price,
+                    subtotal=subtotal
+                )
             )
+
+        # Crear Orden
+        new_order = web_order_model.WebOrder(
+            customer_name=req.customer_name,
+            customer_email=req.customer_email,
+            customer_phone=req.customer_phone,
+            customer_document=req.customer_document,
+            shipping_address=req.shipping_address,
+            total_amount=total_amount,
+            status="PENDIENTE"
         )
 
-    # Crear Orden
-    new_order = web_order_model.WebOrder(
-        customer_name=req.customer_name,
-        customer_email=req.customer_email,
-        customer_phone=req.customer_phone,
-        customer_document=req.customer_document,
-        shipping_address=req.shipping_address,
-        total_amount=total_amount,
-        status="PENDIENTE"
-    )
+        db.add(new_order)
+        db.commit()
+        db.refresh(new_order)
 
-    db.add(new_order)
-    db.commit()
-    db.refresh(new_order)
+        # Asignar a los items el order_id
+        for oi in order_items:
+            oi.order_id = new_order.order_id
+            db.add(oi)
 
-    # Asignar a los items el order_id
-    for oi in order_items:
-        oi.order_id = new_order.order_id
-        db.add(oi)
+        db.commit()
 
-    db.commit()
-
-    return {"message": "Pedido recibido correctamente", "web_order_id": new_order.order_id, "order_id": new_order.order_id, "status": new_order.status}
+        return {"message": "Pedido recibido correctamente", "web_order_id": new_order.order_id, "order_id": new_order.order_id, "status": new_order.status}
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        # Log it too
+        print(f"❌ Checkout Error: {error_details}")
+        return {"error": str(e), "details": error_details, "payload_received": req.dict()}
 
 
 # ═══════════════════════════════════════════════════════════════
