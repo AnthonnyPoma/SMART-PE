@@ -107,6 +107,8 @@ def process_web_checkout(req: CheckoutRequest, db: Session = Depends(get_db)):
         if not product:
             raise HTTPException(status_code=404, detail=f"Producto con ID {item.product_id} no encontrado")
         
+        # Aquí idealmente consultaríamos Inventory para ver stock real.
+        # Por ahora asumimos que hay stock y solo tomamos el precio
         subtotal = float(product.base_price) * item.quantity
         total_amount += subtotal
 
@@ -119,29 +121,32 @@ def process_web_checkout(req: CheckoutRequest, db: Session = Depends(get_db)):
             )
         )
 
-    # Crear Orden
-    new_order = web_order_model.WebOrder(
-        customer_name=req.customer_name,
-        customer_email=req.customer_email,
-        customer_phone=req.customer_phone,
-        customer_document=req.customer_document,
-        shipping_address=req.shipping_address,
-        total_amount=total_amount,
-        status="PENDIENTE"
-    )
+    try:
+        # Crear Orden
+        new_order = web_order_model.WebOrder(
+            customer_name=req.customer_name,
+            customer_email=req.customer_email,
+            customer_phone=req.customer_phone,
+            customer_document=req.customer_document,
+            shipping_address=req.shipping_address,
+            total_amount=total_amount,
+            status="PENDIENTE"
+        )
 
-    db.add(new_order)
-    db.commit()
-    db.refresh(new_order)
+        db.add(new_order)
+        db.commit()
+        db.refresh(new_order)
 
-    # Asignar a los items el order_id
-    for oi in order_items:
-        oi.order_id = new_order.order_id
-        db.add(oi)
+        # Asignar a los items el order_id
+        for oi in order_items:
+            oi.order_id = new_order.order_id
+            db.add(oi)
 
-    db.commit()
-
-    return {"message": "Pedido recibido correctamente", "web_order_id": new_order.order_id, "order_id": new_order.order_id, "status": new_order.status}
+        db.commit()
+        return {"message": "Pedido recibido correctamente", "web_order_id": new_order.order_id, "order_id": new_order.order_id, "status": new_order.status}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error en el servidor: {str(e)}")
 
 
 # ═══════════════════════════════════════════════════════════════

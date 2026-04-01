@@ -5,7 +5,7 @@ from . import (
     user_model,
     role_model,
     store_model,
-    category_model,
+    category_model, # Reordered
     product_model,
     sale_model,
     client_model,
@@ -13,12 +13,6 @@ from . import (
     supplier_model,
     transfer_model,
     promotion_model,
-    cash_model,
-    loyalty_model,
-    audit_model,
-    rma_model,
-    setting_model,
-    web_order_model
 )
 
 __all__ = [
@@ -33,10 +27,5 @@ __all__ = [
     "category_model",
     "transfer_model",
     "promotion_model",
-    "cash_model",
     "loyalty_model",
-    "audit_model",
-    "rma_model",
-    "setting_model",
-    "web_order_model"
 ]
