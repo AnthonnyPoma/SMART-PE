@@ -32,19 +32,6 @@ class OrderStatusUpdate(BaseModel):
     status: str
     notes: Optional[str] = None
 
-@router.get("/admin/migrate-db")
-def migrate_db_production(db: Session = Depends(get_db)):
-    """MIGRACIÓN DE EMERGENCIA: Agrega columnas faltantes en el servidor real."""
-    from sqlalchemy import text
-    try:
-        # 1. Agregar customer_document a web_orders
-        db.execute(text("ALTER TABLE web_orders ADD COLUMN IF NOT EXISTS customer_document VARCHAR(20) NULL;"))
-        db.commit()
-        return {"status": "success", "message": "Base de datos migrada correctamente en Railway"}
-    except Exception as e:
-        db.rollback()
-        return {"status": "error", "message": str(e)}
-
 @router.get("/categories")
 def get_public_categories(db: Session = Depends(get_db)):
     # Devuelve el árbol de categorías (Mega Menú)
