@@ -49,6 +49,7 @@ const Checkout = () => {
         customer_name: `${form.nombre} ${form.apellido}`,
         customer_email: form.email,
         customer_phone: form.telefono,
+        customer_document: form.dni,
         shipping_address: `${form.direccion}, ${form.distrito}, ${form.departamento}`,
         total_amount: total,
         items: cart.map(i => ({

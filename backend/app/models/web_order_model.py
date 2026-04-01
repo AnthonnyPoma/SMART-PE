@@ -13,6 +13,7 @@ class WebOrder(Base):
     customer_name = Column(String(150), nullable=False)
     customer_email = Column(String(150), nullable=False)
     customer_phone = Column(String(20), nullable=True)
+    customer_document = Column(String(20), nullable=True)
     shipping_address = Column(String(255), nullable=True)
     
     # Totales y Estado

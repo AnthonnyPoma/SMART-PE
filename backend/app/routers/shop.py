@@ -23,6 +23,7 @@ class CheckoutRequest(BaseModel):
     customer_name: str
     customer_email: str
     customer_phone: Optional[str] = None
+    customer_document: Optional[str] = None
     shipping_address: Optional[str] = None
     total_amount: Optional[float] = None
     items: List[CartItem]
@@ -125,6 +126,7 @@ def process_web_checkout(req: CheckoutRequest, db: Session = Depends(get_db)):
         customer_name=req.customer_name,
         customer_email=req.customer_email,
         customer_phone=req.customer_phone,
+        customer_document=req.customer_document,
         shipping_address=req.shipping_address,
         total_amount=total_amount,
         status="PENDIENTE"
@@ -182,6 +184,7 @@ def list_web_orders(
             "customer_name": o.customer_name,
             "customer_email": o.customer_email,
             "customer_phone": o.customer_phone,
+            "customer_document": o.customer_document,
             "shipping_address": o.shipping_address,
             "total_amount": float(o.total_amount),
             "status": o.status,
@@ -223,6 +226,7 @@ def get_web_order_detail(
         "customer_name": order.customer_name,
         "customer_email": order.customer_email,
         "customer_phone": order.customer_phone,
+        "customer_document": order.customer_document,
         "shipping_address": order.shipping_address,
         "total_amount": float(order.total_amount),
         "status": order.status,
@@ -346,9 +350,15 @@ def update_web_order_status(
             first_name = name_parts[0]
             last_name = name_parts[1] if len(name_parts) > 1 else ""
 
+            doc_type = "DNI"
+            if order.customer_document and len(order.customer_document) == 11:
+                doc_type = "RUC"
+            elif order.customer_document and len(order.customer_document) >= 6 and not order.customer_document.isdigit():
+                doc_type = "CE"
+                
             client = client_model.Client(
-                document_type="DNI",
-                document_number=f"WEB-{order.order_id}",  # Doc temporal hasta que actualicen
+                document_type=doc_type,
+                document_number=order.customer_document or f"WEB-{order.order_id}",
                 first_name=first_name,
                 last_name=last_name,
                 email=order.customer_email,
@@ -369,6 +379,8 @@ def update_web_order_status(
                 client.phone = order.customer_phone
             if not client.address and order.shipping_address:
                 client.address = order.shipping_address
+            if (not client.document_number or client.document_number.startswith("WEB-")) and order.customer_document:
+                client.document_number = order.customer_document
             side_effects["client_created"] = False
             side_effects["client_id"] = client.client_id
 

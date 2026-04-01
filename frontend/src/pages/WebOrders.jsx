@@ -146,6 +146,9 @@ function OrderDetailModal({ order, open, onClose, onStatusChange }) {
                 <PersonIcon fontSize="inherit" /> Datos del Cliente
               </Typography>
               <Typography variant="body2" fontWeight={600} gutterBottom>{order.customer_name}</Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Documento: <Box component="span" sx={{ fontWeight: 700 }}>{order.customer_document || 'No provisto'}</Box>
+              </Typography>
               <Typography variant="body2" color="text.secondary" gutterBottom>Email: {order.customer_email}</Typography>
               <Typography variant="body2" color="text.secondary">Teléfono: {order.customer_phone || '—'}</Typography>
             </Box>
