@@ -5,15 +5,32 @@ import { useCartStore } from "../store/cartStore";
 import { submitCheckout } from "../api";
 import { ProductImageMock } from "../components/Layout";
 
-const FormField = ({ label, k, type = "text", placeholder = "", half = false, form, set, errors, setErrors }) => (
-  <div style={{ flex: half ? "0 0 calc(50% - 10px)" : "1 1 100%" }}>
-    <label style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", display: "block", marginBottom: 8 }}>{label}</label>
-    <input type={type} value={form[k]} onChange={e => { set(k, e.target.value); setErrors(er => ({ ...er, [k]: "" })); }}
-      placeholder={placeholder}
-      style={{ width: "100%", borderColor: errors[k] ? "#EF4444" : "#CBD5E1", background: '#FFFFFF' }} />
-    {errors[k] && <p style={{ fontSize: 12, color: "#EF4444", marginTop: 6, fontWeight: 600 }}>{errors[k]}</p>}
-  </div>
-);
+const FormField = ({ label, k, type = "text", placeholder = "", half = false, form, set, errors, setErrors }) => {
+  const handleChange = (e) => {
+    let val = e.target.value;
+    // Si es DNI o Teléfono, limpiar todo lo que no sea número
+    if (k === "dni" || k === "telefono") {
+      val = val.replace(/\D/g, "");
+    }
+    set(k, val);
+    setErrors(er => ({ ...er, [k]: "" }));
+  };
+
+  return (
+    <div style={{ flex: half ? "0 0 calc(50% - 10px)" : "1 1 100%" }}>
+      <label style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", display: "block", marginBottom: 8 }}>{label}</label>
+      <input 
+        type={type} 
+        value={form[k]} 
+        onChange={handleChange}
+        placeholder={placeholder}
+        maxLength={(k === "dni") ? 11 : (k === "telefono" ? 9 : 150)}
+        style={{ width: "100%", borderColor: errors[k] ? "#EF4444" : "#CBD5E1", background: '#FFFFFF' }} 
+      />
+      {errors[k] && <p style={{ fontSize: 12, color: "#EF4444", marginTop: 6, fontWeight: 600 }}>{errors[k]}</p>}
+    </div>
+  );
+};
 
 const Checkout = () => {
   const navigate = useNavigate();
@@ -34,7 +51,15 @@ const Checkout = () => {
     if (!form.nombre.trim()) e.nombre = "Requerido";
     if (!form.apellido.trim()) e.apellido = "Requerido";
     if (!form.email.includes("@")) e.email = "Email inválido";
-    if (form.telefono.length < 9) e.telefono = "Mínimo 9 dígitos";
+    
+    if (form.telefono.length !== 9) {
+      e.telefono = "Debe tener 9 dígitos";
+    }
+    
+    if (form.dni.length !== 8 && form.dni.length !== 11) {
+      e.dni = "DNI (8) o RUC (11) dígitos";
+    }
+    
     if (!form.direccion.trim()) e.direccion = "Requerido";
     return e;
   };
