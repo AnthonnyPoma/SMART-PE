@@ -23,28 +23,22 @@ def get_dashboard_stats(
     # Si admin pasa store_id por query param, usarlo. Si no, usar el del token.
     effective_store_id = store_id if store_id is not None else current_user.store_id
     
-    from sqlalchemy.orm import joinedload
-    
-    # --- 1. DATOS DE VENTA (HOY) ---
-    # Filtrar por tienda
-    sales_today = db.query(Sale).filter(
-        func.date(Sale.date_created) == today,
+    # --- 1. DATOS DE VENTA (HOY) Y AYER ---
+    totals_today = db.query(
+        func.coalesce(func.sum(Sale.total_amount), 0.0),
+        func.count(Sale.sale_id)
+    ).filter(
+        func.date(Sale.date_created) == today, 
         Sale.store_id == effective_store_id
-    ).options(
-        joinedload(Sale.details).joinedload(SaleDetail.series)
-    ).all()
+    ).first()
     
-    total_money_today = sum(float(s.total_amount) for s in sales_today)
-    transaction_count_today = len(sales_today)
+    total_money_today = float(totals_today[0] if totals_today else 0)
+    transaction_count_today = totals_today[1] if totals_today else 0
 
-    # --- 1.1 COMPARATIVA CON AYER (GROWTH) ---
     yesterday = today - timedelta(days=1)
-    sales_yesterday = db.query(Sale).filter(
-        func.date(Sale.date_created) == yesterday,
-        Sale.store_id == effective_store_id
-    ).all()
     
-    total_money_yesterday = sum(float(s.total_amount) for s in sales_yesterday)
+    total_money_yesterday = float(db.query(func.coalesce(func.sum(Sale.total_amount), 0.0))
+        .filter(func.date(Sale.date_created) == yesterday, Sale.store_id == effective_store_id).scalar() or 0.0)
 
     growth_percentage = 0.0
     if total_money_yesterday > 0:
@@ -53,19 +47,19 @@ def get_dashboard_stats(
         growth_percentage = 100.0 if total_money_today > 0 else 0.0
 
     # --- 2. UTILIDAD ESTIMADA (HOY) ---
+    details_today = db.query(
+        SaleDetail.quantity, 
+        SaleDetail.unit_price, 
+        SaleDetail.subtotal, 
+        ProductSeries.cost
+    ).join(Sale, Sale.sale_id == SaleDetail.sale_id)\
+     .outerjoin(ProductSeries, ProductSeries.series_id == SaleDetail.series_id)\
+     .filter(func.date(Sale.date_created) == today, Sale.store_id == effective_store_id).all()
+     
     gross_profit_today = 0
-    for sale in sales_today:
-        for detail in sale.details:
-            cost = 0.0
-            if detail.series_id and detail.series:
-                cost = float(detail.series.cost) if detail.series.cost else 0.0
-            
-            if cost == 0:
-                cost = float(detail.unit_price) * 0.8 
-            
-            subtotal_float = float(detail.subtotal)
-            profit = subtotal_float - (cost * detail.quantity)
-            gross_profit_today += profit
+    for qty, u_price, subtotal, series_cost in details_today:
+        cost = float(series_cost) if series_cost else (float(u_price) * 0.8)
+        gross_profit_today += float(subtotal) - (cost * qty)
 
     # --- 3. VALOR DEL INVENTARIO (ACTUAL) ---
     # PARTE A: Series Disponibles en ESTA TIENDA

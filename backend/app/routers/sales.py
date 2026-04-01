@@ -532,30 +532,33 @@ def void_sale(sale_id: int, void_data: VoidSaleRequest, background_tasks: Backgr
 # ==========================================
 @router.post("/sales/{sale_id}/emit_sunat")
 def emit_sale_to_sunat(sale_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """
-    Permite al administrador reintentar la emisión de un comprobante a SUNAT
-    cuando falló por falta de internet, error del servidor NubeFact o similares.
-    Solo aplica para ventas en estado PENDIENTE o ERROR_SUNAT.
-    """
     sale = db.query(Sale).filter(Sale.sale_id == sale_id).first()
     if not sale:
         raise HTTPException(status_code=404, detail="Venta no encontrada")
 
-    # 🔒 Solo puede reintentar ventas de su propia tienda
     if sale.store_id != current_user.store_id and current_user.role not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="No tienes permiso para esta operación.")
 
     if sale.sunat_status == "ACEPTADO":
         raise HTTPException(status_code=400, detail="Esta venta ya fue aceptada por SUNAT. No se puede re-emitir.")
 
-    # Resetear estado a PENDIENTE antes de reintentar
     sale.sunat_status = "PENDIENTE"
     db.commit()
 
-    # Disparar en background para no bloquear la UI
     background_tasks.add_task(process_sunat_emission, sale_id)
-
     return {"message": f"Re-emisión a SUNAT iniciada para Venta #{sale_id}", "status": "PENDIENTE"}
+
+@router.post("/sales/{sale_id}/emit_sunat_sync")
+def emit_sale_to_sunat_sync(sale_id: int, db: Session = Depends(get_db)):
+    """TEST SYNC ROUTE"""
+    from app.services.sunat.emission_service import process_sunat_emission
+    sale = db.query(Sale).filter(Sale.sale_id == sale_id).first()
+    sale.sunat_status = "PENDIENTE"
+    db.commit()
+    # Import locally
+    from app.services.sunat.nubefact_service import emit_to_nubefact
+    res = emit_to_nubefact(sale, db)
+    return {"response": res}
 
 
 # ==========================================
