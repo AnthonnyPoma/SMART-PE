@@ -122,9 +122,9 @@ def build_nubefact_payload(sale, db: Session) -> dict:
                 cli_tipo_num  = TIPO_DOC_CLIENTE.get(doc_type, "1")
                 cli_doc_num   = doc_num
             else:
-                # Comprador WEB o sin DNI válido -> Documento "-" (Público General/Varios)
-                cli_tipo_num  = "-"
-                cli_doc_num   = "-"
+                # Comprador WEB o sin DNI válido -> Documento "0" (Público General/Varios)
+                cli_tipo_num  = CLIENTE_ANONIMO_DOC_TYPE
+                cli_doc_num   = CLIENTE_ANONIMO_DOC_NUM
 
     # ── Ítems ─────────────────────────────────────────────────────────────────
     items = []
