@@ -1,36 +1,42 @@
-# SMART PE — Sistema de Gestión para Tiendas de Tecnología
+# SMART PE — Sistema de Gestión Empresarial (ERP) para Retail Tecnológico
 
-## ¿Qué es SMART PE?
+## Descripción General
+**SMART PE** es una solución integral diseñada para optimizar la operación de negocios en el sector de tecnología. La plataforma permite centralizar la gestión de múltiples sucursales, automatizar el control de inventarios críticos (como celulares por IMEI) y cumplir con la normativa fiscal peruana mediante facturación electrónica integrada.
 
-SMART PE es una plataforma diseñada para ayudar a las empresas de tecnología a gestionar todo su negocio en un solo lugar. Permite controlar el inventario de equipos (como celulares por IMEI), administrar varias sucursales al mismo tiempo y emitir facturas electrónicas de manera automática y segura.
+---
 
-## Funciones Principales
+## Módulos Funcionales (Visión Técnica y de Negocio)
 
-### Gestión de Inventario y Almacenes
-- **Control de IMEI y Series**: Rastreo exacto de cada equipo vendido mediante su número de serie, con un historial completo de movimientos (Kardex).
-- **Múltiples Sucursales**: Administración de varias tiendas de forma independiente, permitiendo enviar mercadería de una sede a otra de forma segura.
-- **Órdenes de Compra**: Gestión sencilla de pedidos a proveedores con generación de documentos en PDF.
+### 1. Gestión de Inventarios y Logística Avanzada
+- **Control por Series e IMEI**: Sistema de trazabilidad total para productos seriados. Implementa un **Kardex automatizado** que registra cada movimiento, garantizando la integridad del stock.
+- **Logística Multi-Sede**: Administración aislada de sucursales con soporte para **transferencias inter-tienda**, asegurando que la mercadería viaje de forma registrada y segura.
+- **Abastecimiento**: Ciclo de compras profesional con generación de órdenes de compra en PDF y seguimiento de proveedores.
 
-### Punto de Venta (Ventas en Tienda)
-- **Caja Rápida y Fácil**: Interfaz moderna para realizar ventas aceptando efectivo, tarjetas o pagos con QR.
-- **Facturación Electrónica**: Conexión directa con NubeFact (SUNAT) para entregar boletas y facturas válidas a los clientes al instante.
-- **Seguridad en las Ventas**: El sistema asegura que cada venta descuente el stock correcto y registre los pagos sin errores.
+### 2. Punto de Venta (POS) y Facturación Electrónica
+- **Interfaz POS de Alto Rendimiento**: Procesamiento de ventas en tiempo real compatible con múltiples métodos de pago (Efectivo, Tarjetas, QR).
+- **Integración con NubeFact (SUNAT)**: Emisión automática de boletas y facturas electrónicas. El sistema gestiona estados de envío y almacenamiento de XML/PDF para cumplimiento tributario.
+- **Control Seguro de Transacciones**: Implementación de validaciones lógicas para evitar discrepancias entre lo cobrado y el stock de almacén.
 
-### Clientes y Fidelización
-- **Registro de Clientes (CRM)**: Base de datos de clientes con validación automática de DNI y RUC para evitar errores.
-- **Programa de Puntos**: Sistema de premios para clientes frecuentes donde acumulan puntos por cada compra para luego canjarlos por descuentos.
-- **Cupones y Ofertas**: Motor para crear promociones y descuentos especiales que se aplican automáticamente en el carrito.
+### 3. CRM y Fidelización de Clientes
+- **Registro Inteligente de Clientes**: CRM con validación de **DNI/RUC** para asegurar datos correctos en los comprobantes.
+- **Programa de Lealtad**: Sistema configurable de acumulación y canje de puntos para incentivar la recurrencia de compra.
+- **Motor de Promociones**: Validación dinámica de cupones y ofertas especiales directamente en el carrito de compras.
 
-### Reportes y Control de Negocio
-- **Panel de Control (Dashboard)**: Gráficos claros con las ventas del día, alertas de productos por agotarse y cálculo de comisiones para el personal.
-- **Auditoría de Inventario**: Herramientas para contar productos y verificar que lo que hay físicamente coincida con el sistema.
-- **Reportes Financieros**: Generación de reportes de ingresos, egresos y flujo de caja listos para descargar en PDF.
+### 4. Business Intelligence y Control Operativo
+- **Dashboard Ejecutivo**: Visualización en tiempo real de indicadores clave (**KPIs**), alertas de rotación de stock y cálculo de comisiones.
+- **Auditoría Ciega**: Herramientas para la verificación de inventarios físicos con reportes comparativos automáticos.
+- **Reportes Financieros**: Generación de archivos PDF para cierres de caja, flujos de efectivo y estados de ventas.
 
-## Tecnología Utilizada
+---
 
-- **Backend (Servidor)**: Construido con **FastAPI** para una respuesta rápida y eficiente.
-- **Frontend (Interfaz)**: Desarrollado con **React** para una navegación fluida y profesional.
-- **Base de Datos**: **PostgreSQL**, garantizando que toda la información esté organizada y segura.
+## Arquitectura y Stack Tecnológico
+
+El sistema ha sido desarrollado bajo estándares modernos con un enfoque en escalabilidad y rendimiento:
+
+- **Backend**: **FastAPI** (Python 3.10+) con operaciones asíncronas para una respuesta de servidor de baja latencia.
+- **Frontend**: **React 18+** y **Material UI 5**, proporcionando una interfaz de usuario limpia, responsiva y profesional.
+- **Base de Datos**: **PostgreSQL** con el ORM **SQLAlchemy**, asegurando la integridad referencial y seguridad de los datos.
+- **Infraestructura**: Despliegue distribuido en **Vercel** (Frontend) y **Railway** (Backend/Database) para alta disponibilidad.
 
 ---
 © 2024 SMART PE. Todos los derechos reservados.
