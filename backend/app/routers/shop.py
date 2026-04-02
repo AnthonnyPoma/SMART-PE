@@ -53,20 +53,6 @@ def diagnose_sale_production(sale_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         return {"error": str(e)}
 
-@router.get("/admin/diagnose-sale/{sale_id}")
-def diagnose_sale_production_v2(sale_id: int, db: Session = Depends(get_db)):
-    from app.models.sale_model import Sale
-    from app.services.sunat.nubefact_service import emit_to_nubefact
-    try:
-        sale = db.query(Sale).filter(Sale.sale_id == sale_id).first()
-        if not sale: return {"error": "No existe"}
-        # Forzamos una limpieza de estado para probar
-        sale.sunat_status = "PENDIENTE"
-        db.commit()
-        return emit_to_nubefact(sale, db)
-    except Exception as e:
-        return {"error": str(e)}
-
 @router.get("/categories")
 def get_public_categories(db: Session = Depends(get_db)):
     # Devuelve el árbol de categorías (Mega Menú)
