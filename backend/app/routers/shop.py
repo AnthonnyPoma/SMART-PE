@@ -32,6 +32,25 @@ class OrderStatusUpdate(BaseModel):
     status: str
     notes: Optional[str] = None
 
+@router.get("/admin/debug-sales")
+def debug_sales_production(db: Session = Depends(get_db)):
+    """Diagnóstico: Lista las últimas ventas de la DB en producción."""
+    from sqlalchemy import text
+    try:
+        result = db.execute(text("SELECT sale_id, invoice_type, invoice_number, sunat_status, date_created FROM sales ORDER BY sale_id DESC LIMIT 10;")).fetchall()
+        sales_list = []
+        for r in result:
+            sales_list.append({
+                "id": r[0],
+                "type": r[1],
+                "num": r[2],
+                "status": r[3],
+                "date": str(r[4])
+            })
+        return {"status": "success", "sales": sales_list}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @router.get("/categories")
 def get_public_categories(db: Session = Depends(get_db)):
     # Devuelve el árbol de categorías (Mega Menú)
