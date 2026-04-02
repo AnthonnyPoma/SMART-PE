@@ -37,7 +37,7 @@ TIPO_DOC_CLIENTE = {
 
 CLIENTE_ANONIMO_DOC_TYPE = "-"
 CLIENTE_ANONIMO_DOC_NUM  = "-"
-CLIENTE_ANONIMO_NOMBRE   = "CLIENTE ANONIMO"
+CLIENTE_ANONIMO_NOMBRE   = "-"
 
 UNIDAD_UNIDAD = "NIU"   # Unidad de producto (catálogo SUNAT)
 
@@ -199,7 +199,9 @@ def build_nubefact_payload(sale, db: Session) -> dict:
         "orden_compra_servicio":             "",
         "tabla_personalizada_codigo":        "",
         "formato_de_pdf":                    "",
-        "codigo_unico":                      str(sale.sale_id),  # Identificador único anti-duplicados
+        # Identificador único: Incluimos el ID de la venta y la fecha de creación 
+        # para que si se reintenta tras un error de comunicación, NubeFact lo vea como nuevo
+        "codigo_unico":                      f"{sale.sale_id}-{sale.date_created.strftime('%Y%m%d%H%M') if sale.date_created else '0'}", 
         "items":                             items,
     }
 
@@ -241,11 +243,16 @@ def emit_to_nubefact(sale, db: Session) -> dict:
         }
 
         import json as _json
-        logger.info(f"🚀 [NubeFact] Iniciando → Venta #{sale.sale_id} | Serie {payload['serie']} | Fecha {payload['fecha_de_emision']}")
-        logger.debug(f"📦 PAYLOAD #{sale.sale_id}:\n{_json.dumps(payload, ensure_ascii=False, indent=2)}")
-
-        response = requests.post(NUBEFACT_URL, json=payload, headers=headers, timeout=10)
-        data     = response.json()
+        logger.info(f"🚀 [NubeFact] Enviando → Venta #{sale.sale_id} | Serie {payload['serie']} | ID {payload['codigo_unico']}")
+        
+        # Aumentamos timeout a 25s para dar tiempo a NubeFact en momentos de carga
+        response = requests.post(NUBEFACT_URL, json=payload, headers=headers, timeout=25)
+        
+        try:
+            data = response.json()
+        except Exception:
+            logger.error(f"❌ [NubeFact] Respuesta #{sale.sale_id} no es JSON válido: {response.text}")
+            return {"success": False, "error_msg": "Respuesta inválida del servidor SUNAT"}
         logger.info(f"📨 [NubeFact] Respuesta #{sale.sale_id}: HTTP {response.status_code} | {data}")
 
         if response.status_code == 200 and data.get("errors") is None:

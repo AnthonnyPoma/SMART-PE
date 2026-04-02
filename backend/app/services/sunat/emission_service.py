@@ -21,10 +21,15 @@ def process_sunat_emission(sale_id: int):
             logger.error(f"❌ [Background] Venta #{sale_id} no encontrada.")
             return
 
-        # Saltar si ya fue procesada exitosamente
-        if sale.sunat_status == "ACEPTADO":
-            logger.info(f"ℹ️ [Background] Venta #{sale_id} ya tiene estado ACEPTADO. Se omite.")
+        # Saltar si ya fue procesada exitosamente o está en curso
+        if sale.sunat_status in ("ACEPTADO", "PROCESANDO"):
+            logger.info(f"ℹ️ [Background] Venta #{sale_id} ya está en estado {sale.sunat_status}. Se omite.")
             return
+
+        # Marcamos como PROCESANDO para evitar que otro worker paralelo intente lo mismo
+        sale.sunat_status = "PROCESANDO"
+        db.commit()
+        db.refresh(sale)
 
         # ── Llamar al conector real de NubeFact ──────────────────────────────
         from app.services.sunat.nubefact_service import emit_to_nubefact
