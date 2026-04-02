@@ -239,10 +239,7 @@ def process_sale(sale_data: SaleCreate, background_tasks: BackgroundTasks, db: S
     return {"sale_id": new_sale.sale_id, "total_amount": total_sale, "status": "completado"}
 
 # ==========================================
-# 📜 HISTORIAL DE VENTAS
-# ==========================================
-# ==========================================
-# 📜 HISTORIAL DE VENTAS
+# GESTIÓN DE HISTORIAL DE VENTAS
 # ==========================================
 @router.get("/sales/history", response_model=List[SaleHistoryResponse])
 def get_sales_history(store_id: Optional[int] = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -548,21 +545,9 @@ def emit_sale_to_sunat(sale_id: int, background_tasks: BackgroundTasks, db: Sess
     background_tasks.add_task(process_sunat_emission, sale_id)
     return {"message": f"Re-emisión a SUNAT iniciada para Venta #{sale_id}", "status": "PENDIENTE"}
 
-@router.post("/sales/{sale_id}/emit_sunat_sync")
-def emit_sale_to_sunat_sync(sale_id: int, db: Session = Depends(get_db)):
-    """TEST SYNC ROUTE"""
-    from app.services.sunat.emission_service import process_sunat_emission
-    sale = db.query(Sale).filter(Sale.sale_id == sale_id).first()
-    sale.sunat_status = "PENDIENTE"
-    db.commit()
-    # Import locally
-    from app.services.sunat.nubefact_service import emit_to_nubefact
-    res = emit_to_nubefact(sale, db)
-    return {"response": res}
-
 
 # ==========================================
-# 🖨️ GENERAR TICKET "PRECISIÓN MILIMÉTRICA"
+# GENERACIÓN DE COMPROBANTES PDF (TICKET)
 # ==========================================
 @router.get("/sales/{sale_id}/ticket")
 def generate_ticket_pdf(sale_id: int, db: Session = Depends(get_db)):

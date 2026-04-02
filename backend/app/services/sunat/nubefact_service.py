@@ -242,9 +242,6 @@ def emit_to_nubefact(sale, db: Session) -> dict:
             "Content-Type":  "application/json",
         }
 
-        import json as _json
-        logger.info(f"🚀 [NubeFact] Enviando → Venta #{sale.sale_id} | Serie {payload['serie']} | ID {payload['codigo_unico']}")
-        
         # Aumentamos timeout a 25s para dar tiempo a NubeFact en momentos de carga
         response = requests.post(NUBEFACT_URL, json=payload, headers=headers, timeout=25)
         
@@ -253,7 +250,8 @@ def emit_to_nubefact(sale, db: Session) -> dict:
         except Exception:
             logger.error(f"❌ [NubeFact] Respuesta #{sale.sale_id} no es JSON válido: {response.text}")
             return {"success": False, "error_msg": "Respuesta inválida del servidor SUNAT"}
-        logger.info(f"📨 [NubeFact] Respuesta #{sale.sale_id}: HTTP {response.status_code} | {data}")
+        # Log de respuesta del servidor (HTTP status)
+        logger.debug(f"📨 [NubeFact] Respuesta #{sale.sale_id}: HTTP {response.status_code}")
 
         if response.status_code == 200 and data.get("errors") is None:
             return {

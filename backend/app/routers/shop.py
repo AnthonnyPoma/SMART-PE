@@ -32,27 +32,6 @@ class OrderStatusUpdate(BaseModel):
     status: str
     notes: Optional[str] = None
 
-@router.get("/admin/diagnose-sale/{sale_id}")
-def diagnose_sale_production(sale_id: int, db: Session = Depends(get_db)):
-    """Diagnóstico crítico: Intenta emitir una venta y devuelve la respuesta CRUDA de NubeFact."""
-    from app.models.sale_model import Sale
-    from app.services.sunat.nubefact_service import emit_to_nubefact
-    import json
-    try:
-        sale = db.query(Sale).filter(Sale.sale_id == sale_id).first()
-        if not sale:
-            return {"error": "Venta no encontrada"}
-        
-        result = emit_to_nubefact(sale, db)
-        return {
-            "sale_id": sale_id,
-            "invoice_type": sale.invoice_type,
-            "client_id": sale.client_id,
-            "nubefact_response": result
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
 @router.get("/categories")
 def get_public_categories(db: Session = Depends(get_db)):
     # Devuelve el árbol de categorías (Mega Menú)

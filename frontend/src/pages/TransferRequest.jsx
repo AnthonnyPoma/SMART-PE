@@ -62,16 +62,12 @@ function TransferRequest() {
     const fetchAvailableImeis = async (productId) => {
         try {
             const url = `/products/${productId}/series?store_id=${sourceStoreId}&status=disponible`;
-            console.log('🔵 Solicitando IMEIs:', url);
             const res = await api.get(url);
-            console.log('✅ IMEIs recibidos del backend:', res.data);
-            console.log('✅ Cantidad:', res.data.length);
 
             // Normalizar respuesta: si el backend devuelve strings, convertir a objetos
             // IMPORTANTE: NO asignar series_id falso, usar null y depender de serial_number
             let normalizedData = res.data;
             if (res.data.length > 0 && typeof res.data[0] === 'string') {
-                console.log('⚠️ Backend devolvió strings, normalizando (sin series_id)...');
                 normalizedData = res.data.map((serial) => ({
                     series_id: null,  // NO usar index+1, el backend buscará por serial_number
                     serial_number: serial,
@@ -86,7 +82,7 @@ function TransferRequest() {
             
             const filteredData = normalizedData.filter(imei => !currentSelectedSerials.includes(imei.serial_number));
 
-            console.log('✅ Datos normalizados y filtrados:', filteredData);
+
             setAvailableImeis(filteredData);
         } catch (err) {
             console.error('❌ Error al cargar IMEIs:', err);

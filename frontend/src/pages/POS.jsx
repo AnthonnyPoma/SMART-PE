@@ -388,7 +388,7 @@ function POS() {
     setCart(cart.filter(item => item.uniqueId !== uniqueId));
   };
 
-  // 📌 LÓGICA DE SUSPENDER VENTA (TIER 3)
+  // --- Lógica de Ventas Suspendidas ---
   const suspendCurrentSale = () => {
     if (cart.length === 0) return;
     const suspendedSale = {
@@ -442,7 +442,7 @@ function POS() {
     setPaymentDialogOpen(true);
   };
 
-  // 🛡️ VALIDACIÓN PREVENTIVA SUNAT (Antes de abrir el Modal)
+  // --- Validación Preventiva SUNAT (Checkout) ---
   const handleCheckoutAttempt = (method = 'Efectivo') => {
     if (cart.length === 0) return alert("Carrito vacío");
     if (netTotal > 700 && (!clientDni || clientDni.trim() === '')) {
@@ -457,7 +457,7 @@ function POS() {
   const handlePay = async () => {
     if (cart.length === 0) return alert("Carrito vacío");
     
-    // 🛡️ VALIDACIONES TIER 3: Vuelto y Referencia
+    // Validaciones de Transacción: Vuelto y Referencia
     if (paymentMethod === 'Efectivo' && amountReceived && parseFloat(amountReceived) < netTotal) {
          return alert("El monto recibido no puede ser menor al total a pagar.");
     }
@@ -725,7 +725,11 @@ function POS() {
                 <Box sx={{ p: 2, pb: 1 }}>
                   <TextField
                     label="DNI Cliente (Enter para buscar)" variant="outlined" size="small" fullWidth
-                    value={clientDni} onChange={(e) => setClientDni(e.target.value)}
+                    value={clientDni} 
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, ''); // Solo números
+                      if (val.length <= 11) setClientDni(val); // Max 11 caracteres (RUC)
+                    }}
                     inputRef={clientInputRef}
                     onKeyDown={handleSearchClient}
                     InputProps={{ 
@@ -1099,7 +1103,7 @@ function POS() {
         </DialogActions>
       </Dialog>
       
-      {/* MODAL COBRANZA Y VUELTO (TIER 3) */}
+      {/* Modal de Cobranza y Vuelto */}
       <Dialog open={paymentDialogOpen} onClose={() => setPaymentDialogOpen(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ bgcolor: 'success.main', color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
           <AttachMoneyIcon /> {paymentMethod === 'Efectivo' ? 'Cobrar en Efectivo' : `Cobrar con ${paymentMethod}`}
@@ -1160,7 +1164,7 @@ function POS() {
         </DialogActions>
       </Dialog>
 
-      {/* MODAL LISTA DE SUSPENDIDAS (TIER 3) */}
+      {/* Modal de Ventas Suspendidas */}
       <Dialog open={suspendedDialogOpen} onClose={() => setSuspendedDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ bgcolor: 'warning.main', color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
           <ListAltIcon /> Ventas Suspendidas ({suspendedSales.length})
