@@ -61,18 +61,18 @@ def get_public_categories(db: Session = Depends(get_db)):
 
 @router.get("/products")
 def get_public_products(
-    search: Optional[str] = None, 
-    category_id: Optional[int] = None, 
-    limit: int = 50, 
+    search: Optional[str] = None,
+    category_id: Optional[int] = None,
+    limit: int = 50,
     db: Session = Depends(get_db)
 ):
+    from sqlalchemy import func
     query = db.query(product_model.Product)
     if search:
         query = query.filter(product_model.Product.name.ilike(f"%{search}%"))
     if category_id:
         all_categories = db.query(product_model.Category).all()
         target_ids = {category_id}
-        
         changed = True
         while changed:
             changed = False
@@ -80,18 +80,48 @@ def get_public_products(
                 if cat.parent_id in target_ids and cat.category_id not in target_ids:
                     target_ids.add(cat.category_id)
                     changed = True
-                    
         query = query.filter(product_model.Product.category_id.in_(target_ids))
-        
-    products = query.limit(limit).all()
-    return products
+
+    products = query.filter(product_model.Product.is_active == True).limit(limit).all() if hasattr(product_model.Product, 'is_active') else query.limit(limit).all()
+
+    result = []
+    for p in products:
+        total_stock = db.query(
+            func.coalesce(func.sum(product_model.Inventory.quantity), 0)
+        ).filter(product_model.Inventory.product_id == p.product_id).scalar()
+        result.append({
+            "product_id": p.product_id,
+            "sku": p.sku,
+            "name": p.name,
+            "description": p.description,
+            "base_price": p.base_price,
+            "image_url": p.image_url,
+            "is_serializable": p.is_serializable,
+            "category_id": p.category_id,
+            "stock": int(total_stock),
+        })
+    return result
 
 @router.get("/products/{product_id}")
 def get_product_detail(product_id: int, db: Session = Depends(get_db)):
+    from sqlalchemy import func
     product = db.query(product_model.Product).filter(product_model.Product.product_id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
-    return product
+    total_stock = db.query(
+        func.coalesce(func.sum(product_model.Inventory.quantity), 0)
+    ).filter(product_model.Inventory.product_id == product.product_id).scalar()
+    return {
+        "product_id": product.product_id,
+        "sku": product.sku,
+        "name": product.name,
+        "description": product.description,
+        "base_price": product.base_price,
+        "image_url": product.image_url,
+        "is_serializable": product.is_serializable,
+        "category_id": product.category_id,
+        "stock": int(total_stock),
+    }
 
 @router.post("/checkout")
 def process_web_checkout(req: CheckoutRequest, db: Session = Depends(get_db)):
