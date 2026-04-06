@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ChevronRight, Truck, ShieldCheck, RotateCcw, Store, Heart, Star, ShoppingBag, Check } from "lucide-react";
-import { getProducts } from "../api";
+import { getProductDetail, getProducts } from "../api";
 import { useCartStore } from "../store/cartStore";
 import { ProductImageMock } from "../components/Layout";
 
@@ -29,22 +29,27 @@ const ProductDetail = () => {
 
   useEffect(() => {
     setLoading(true);
-    getProducts().then(data => {
-      const p = data.find(x => String(x.product_id) === String(id));
-      if (p) {
+    setQty(1);
+    getProductDetail(id)
+      .then(p => {
         setProduct(p);
-        const rel = data.filter(x => x.category_id === p.category_id && String(x.product_id) !== String(id)).slice(0, 4);
-        setRelated(rel);
-      }
-    }).catch(console.error)
+        getProducts({ category_id: p.category_id })
+          .then(all => {
+            const rel = all.filter(x => String(x.product_id) !== String(id)).slice(0, 4);
+            setRelated(rel);
+          })
+          .catch(console.error);
+      })
+      .catch(console.error)
       .finally(() => setLoading(false));
   }, [id]);
 
   if (loading) return <div style={{ padding: 100, textAlign: "center", fontSize: 16, color: '#64748B', fontWeight: 500 }}>Cargando catálogo...</div>;
   if (!product) return <div style={{ padding: 100, textAlign: "center", fontSize: 18, color: '#0F172A', fontWeight: 700 }}>El producto seleccionado no existe o está agotado.</div>;
 
+  const stock = Number(product.stock) || 0;
   const basePrice = parseFloat(product.base_price);
-  const originalPrice = basePrice * 1.15; // mock
+  const originalPrice = basePrice * 1.15;
   const rating = 4.8;
   const reviews = 42;
 
@@ -85,7 +90,7 @@ const ProductDetail = () => {
         <div style={{ flex: 1, minWidth: 320 }}>
           <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
             <span className="tag-badge" style={{ background: "#F1F5F9", color: "#1E3A8A", border: '1px solid #E2E8F0' }}>ENVÍO RÁPIDO</span>
-            <span className="tag-badge" style={{ background: product.stock > 0 ? "#F0FFF4" : "#FEF2F2", color: product.stock > 0 ? "#166534" : "#991B1B", border: `1px solid ${product.stock > 0 ? '#BBF7D0' : '#FECACA'}` }}>{product.stock > 0 ? `Stock Disponible: ${product.stock}` : 'AGOTADO'}</span>
+            <span className="tag-badge" style={{ background: stock > 0 ? "#F0FFF4" : "#FEF2F2", color: stock > 0 ? "#166534" : "#991B1B", border: `1px solid ${stock > 0 ? '#BBF7D0' : '#FECACA'}` }}>{stock > 0 ? `Stock Disponible: ${stock}` : 'AGOTADO'}</span>
           </div>
           <p style={{ fontSize: 12, fontWeight: 700, color: "#94A3B8", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 }}>SKU: {product.sku}</p>
           <h1 style={{ fontSize: "clamp(24px, 3vw, 32px)", fontWeight: 800, color: "#0F172A", lineHeight: 1.25, marginBottom: 20, letterSpacing: '-0.5px' }}>{product.name}</h1>
@@ -117,21 +122,21 @@ const ProductDetail = () => {
               <button onClick={() => setQty(Math.max(1, qty - 1))} style={{ width: 40, height: '100%', border: "none", background: "#F8FAFC", cursor: "pointer", fontSize: 20, fontWeight: 500, color: "#475569", transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background='#F1F5F9'} onMouseLeave={e => e.currentTarget.style.background='#F8FAFC'}>−</button>
               <span style={{ width: 48, textAlign: "center", fontWeight: 700, fontSize: 16, borderLeft: '1px solid #E2E8F0', borderRight: '1px solid #E2E8F0', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{qty}</span>
               <button 
-                onClick={() => setQty(Math.min(product.stock, qty + 1))} 
-                disabled={qty >= product.stock}
-                style={{ width: 40, height: '100%', border: "none", background: "#F8FAFC", cursor: "pointer", fontSize: 20, fontWeight: 500, color: "#475569", opacity: qty >= product.stock ? 0.3 : 1, transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background='#F1F5F9'} onMouseLeave={e => e.currentTarget.style.background='#F8FAFC'}>+</button>
+                onClick={() => setQty(Math.min(stock > 0 ? stock : 99, qty + 1))} 
+                disabled={stock > 0 && qty >= stock}
+                style={{ width: 40, height: '100%', border: "none", background: "#F8FAFC", cursor: "pointer", fontSize: 20, fontWeight: 500, color: "#475569", opacity: (stock > 0 && qty >= stock) ? 0.3 : 1, transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background='#F1F5F9'} onMouseLeave={e => e.currentTarget.style.background='#F8FAFC'}>+</button>
             </div>
             <button 
               onClick={handleAdd} 
-              disabled={product.stock === 0}
-              className="btn-outline" style={{ flex: 1, minWidth: 220, height: 48, fontSize: 15, fontWeight: 700, background: added ? "#1E3A8A" : (product.stock === 0 ? "#F8FAFC" : "#FFFFFF"), color: added ? "#FFFFFF" : (product.stock === 0 ? "#94A3B8" : "#1E3A8A"), borderColor: added ? "#1E3A8A" : (product.stock === 0 ? "#E2E8F0" : "#1E3A8A"), transition: "all 0.2s", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-              {added ? <><Check size={18} strokeWidth={2.5}/> ¡Agregado a tu carrito!</> : (product.stock === 0 ? "Agotado" : "Agregar al carrito")}
+              disabled={stock === 0}
+              className="btn-outline" style={{ flex: 1, minWidth: 220, height: 48, fontSize: 15, fontWeight: 700, background: added ? "#1E3A8A" : (stock === 0 ? "#F8FAFC" : "#FFFFFF"), color: added ? "#FFFFFF" : (stock === 0 ? "#94A3B8" : "#1E3A8A"), borderColor: added ? "#1E3A8A" : (stock === 0 ? "#E2E8F0" : "#1E3A8A"), transition: "all 0.2s", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              {added ? <><Check size={18} strokeWidth={2.5}/> ¡Agregado a tu carrito!</> : (stock === 0 ? "Agotado" : "Agregar al carrito")}
             </button>
             <button style={{ width: 48, height: 48, border: "1px solid #CBD5E1", borderRadius: 6, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: 'all 0.2s' }} onMouseEnter={e => { e.currentTarget.style.background = '#F1F5F9'; e.currentTarget.style.borderColor = '#94A3B8'; e.currentTarget.querySelector('svg').style.color = '#1E3A8A'; }} onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#CBD5E1'; e.currentTarget.querySelector('svg').style.color = '#94A3B8'; }}>
               <Heart size={20} color="#94A3B8" strokeWidth={2} style={{ transition: 'color 0.2s' }} />
             </button>
           </div>
-          <button onClick={() => { handleAdd(); navigate("/checkout"); }} disabled={product.stock===0} className="btn-primary" style={{ width: "100%", height: 52, opacity: product.stock === 0 ? 0.4 : 1, fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 32, borderRadius: 6 }}>
+          <button onClick={() => { handleAdd(); navigate("/checkout"); }} disabled={stock===0} className="btn-primary" style={{ width: "100%", height: 52, opacity: stock === 0 ? 0.4 : 1, fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 32, borderRadius: 6 }}>
             <ShoppingBag size={18} strokeWidth={2.5}/> Comprar ahora
           </button>
 
@@ -173,7 +178,7 @@ const ProductDetail = () => {
                 </tr>
                 <tr style={{ background: "white" }}>
                   <td style={{ padding: "16px 24px", fontSize: 14, fontWeight: 700, color: "#0F172A", width: "40%" }}>Stock Disponible</td>
-                  <td style={{ padding: "16px 24px", fontSize: 14, color: "#475569", fontWeight: 500 }}>Solo {product.stock} unidades listas para entregar.</td>
+                  <td style={{ padding: "16px 24px", fontSize: 14, color: "#475569", fontWeight: 500 }}>Solo {stock} unidades listas para entregar.</td>
                 </tr>
               </tbody>
             </table>
