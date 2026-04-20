@@ -1,19 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, Typography, Button, Paper } from '@mui/material';
 import LockIcon from '@mui/icons-material/Lock';
 import { useCash } from '../../context/CashContext';
 import CashModal from './CashModal';
 
 export default function CashGuard({ children }) {
-    const { cashStatus, loading } = useCash();
+    const { cashStatus, loading, checkCashStatus } = useCash();
     const [modalOpen, setModalOpen] = useState(false);
 
-    if (loading) return null; // O un spinner
+    if (loading) return null;
 
     // Si tiene caja abierta, mostrar contenido protegido (el POS o similar)
     if (cashStatus && cashStatus.has_open_register) {
         return children;
     }
+
+    // Callback al abrir caja exitosamente: forzar recarga del status
+    const handleOpenSuccess = async () => {
+        await checkCashStatus();
+        setModalOpen(false);
+    };
 
     // Si NO tiene caja abierta, mostrar Bloqueo
     return (
@@ -44,8 +50,9 @@ export default function CashGuard({ children }) {
 
             <CashModal 
                 open={modalOpen} 
-                mode="OPEN" 
-                onClose={() => setModalOpen(false)} // Se cerrará solo si tiene éxito dentro de Modal, o podemos forzar recarga
+                mode="OPEN"
+                onSuccess={handleOpenSuccess}
+                onClose={() => setModalOpen(false)}
             />
         </Box>
     );

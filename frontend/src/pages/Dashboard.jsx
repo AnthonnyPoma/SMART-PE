@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, Grid, Paper, Typography, TextField, Button, 
   Tabs, Tab, Card, CardContent, CircularProgress, 
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, Avatar, Divider
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Chip, Avatar, Divider, MenuItem,
+  FormControl, InputLabel, Select
 } from '@mui/material';
 import Layout from '../components/Layout';
 import api from '../api/axios';
@@ -109,6 +110,26 @@ function Dashboard() {
     setTabValue(newValue);
   };
 
+  const handlePresetChange = (e) => {
+      const val = e.target.value;
+      if (!val) return;
+      const end = new Date();
+      const start = new Date();
+      if (val === 'diario') {
+         // keep today
+      } else if (val === 'semanal') {
+         start.setDate(end.getDate() - 7);
+      } else if (val === 'quincenal') {
+         start.setDate(end.getDate() - 15);
+      } else if (val === 'mensual') {
+         start.setMonth(end.getMonth() - 1);
+      } else if (val === 'anual') {
+         start.setFullYear(end.getFullYear() - 1);
+      }
+      setEndDate(end.toISOString().split('T')[0]);
+      setStartDate(start.toISOString().split('T')[0]);
+  };
+
   // KPI Card
   const KpiCard = ({ title, value, icon, color, subtitle, growth }) => (
     <Card elevation={3} sx={{ bgcolor: color, color: 'white', height: '100%', position: 'relative', overflow: 'hidden' }}>
@@ -206,13 +227,29 @@ function Dashboard() {
          <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} sm={6} md={3}>
                <TextField 
+                  select fullWidth size="small"
+                  label="Filtro rápido"
+                  defaultValue="" 
+                  onChange={handlePresetChange} 
+                  sx={{ bgcolor: 'white', minWidth: 160 }}
+               >
+                  <MenuItem value="" disabled>Seleccione...</MenuItem>
+                  <MenuItem value="diario">Hoy (Diario)</MenuItem>
+                  <MenuItem value="semanal">Últimos 7 días</MenuItem>
+                  <MenuItem value="quincenal">Últimos 15 días</MenuItem>
+                  <MenuItem value="mensual">Último Mes</MenuItem>
+                  <MenuItem value="anual">Último Año</MenuItem>
+               </TextField>
+            </Grid>
+            <Grid item xs={12} sm={6} md={2}>
+               <TextField 
                   label="Desde" type="date" fullWidth size="small"
                   InputLabelProps={{ shrink: true }}
                   value={startDate} onChange={(e) => setStartDate(e.target.value)}
                   sx={{ bgcolor: 'white' }}
                />
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
+            <Grid item xs={12} sm={6} md={2}>
                <TextField 
                   label="Hasta" type="date" fullWidth size="small"
                   InputLabelProps={{ shrink: true }}
@@ -308,8 +345,23 @@ function Dashboard() {
                     </Grid>
                   </Grid>
 
+                  {/* Disclaimer si algún producto no tiene costo registrado */}
+                  {summary.has_estimated_cost && (
+                    <Box sx={{ mb: 2, px: 1 }}>
+                      <Chip
+                        icon={<WarningIcon />}
+                        label="Utilidad Bruta estimada: algunos productos no tienen costo de compra registrado. Ingresa los costos reales en el módulo de Inventario para mayor precisión."
+                        color="warning"
+                        variant="outlined"
+                        size="small"
+                        sx={{ height: 'auto', '& .MuiChip-label': { whiteSpace: 'normal', py: 0.5 } }}
+                      />
+                    </Box>
+                  )}
+
                   <Grid container spacing={3}>
-                    <Grid item xs={12} md={8}>
+
+                    <Grid item xs={12} md={7}>
                         <Paper elevation={3} sx={{ p: 3, borderRadius: 2, height: 400 }}>
                             <Typography variant="h6" gutterBottom fontWeight="bold">Tendencia de Ventas (Últimos días)</Typography>
                             <ResponsiveContainer width="100%" height="90%">
@@ -323,17 +375,21 @@ function Dashboard() {
                             </ResponsiveContainer>
                         </Paper>
                     </Grid>
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} md={5}>
                         <Paper elevation={3} sx={{ p: 3, borderRadius: 2, height: 400 }}>
-                             <Typography variant="h6" gutterBottom fontWeight="bold">Top 5 Productos</Typography>
+                             <Typography variant="h6" gutterBottom fontWeight="bold">Top 10 Productos</Typography>
                              <ResponsiveContainer width="100%" height="90%">
-                                <PieChart>
-                                    <Pie data={topProducts.slice(0,5)} cx="50%" cy="50%" innerRadius={40} outerRadius={80} dataKey="value">
-                                        {topProducts.map((entry, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
-                                    </Pie>
-                                    <Tooltip />
-                                    <Legend />
-                                </PieChart>
+                                <BarChart data={topProducts.slice(0,10)} layout="vertical" margin={{ left: 10, right: 20 }}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis type="number" hide />
+                                    <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 11 }} />
+                                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                                    <Bar dataKey="value" fill="#0288d1" name="Venta S/" radius={[0, 4, 4, 0]}>
+                                        {topProducts.slice(0, 10).map((entry, index) => (
+                                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
                              </ResponsiveContainer>
                         </Paper>
                     </Grid>

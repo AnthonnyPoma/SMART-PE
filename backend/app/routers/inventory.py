@@ -559,7 +559,7 @@ def get_available_series(
         ProductSeries.status == status
     ).all()
     
-    print(f"🔍 DEBUG: Encontradas {len(series_list)} series para product_id={product_id}, store_id={store_id}")
+
     
     # Serializar explícitamente cada objeto
     result = []
@@ -571,6 +571,6 @@ def get_available_series(
             "product_id": s.product_id
         })
     
-    print(f"🔍 DEBUG: Primer resultado: {result[0] if result else 'VACIO'}")
+
     
     return result

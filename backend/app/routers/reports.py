@@ -48,24 +48,32 @@ def get_sales_summary(
     total_sales = sum(float(s.total_amount) for s in sales)
     transaction_count = len(sales)
     
-    # Calcular Utilidad (Aprox)
+    # Calcular Utilidad Bruta
     total_cost = 0
+    has_estimated_cost = False  # Flag para advertir en UI si algún producto usa estimación
     for sale in sales:
         for detail in sale.details:
-            # Intentar obtener costo real de la serie, sino usar costo promedio del producto
             item_cost = 0
+
+            # 1. Prioridad: costo real de la serie (IMEI) — más preciso
             if detail.series_id:
                 serie = db.query(ProductSeries).filter(ProductSeries.series_id == detail.series_id).first()
                 if serie and serie.cost:
                     item_cost = float(serie.cost)
-            
-            # Fallback: Costo promedio o estimado (80% del precio venta como seguridad)
+
+            # 2. Fallback: costo promedio ponderado del producto (calculado al ingresar stock)
+            if item_cost == 0 and detail.product_id:
+                product = db.query(Product).filter(Product.product_id == detail.product_id).first()
+                if product and product.average_cost and float(product.average_cost) > 0:
+                    item_cost = float(product.average_cost)
+
+            # 3. Último recurso: estimación del 70% del precio de venta
             if item_cost == 0:
-                # OJO: Esto es solo estimación si no hay data de costos precisa
-                item_cost = float(detail.unit_price or 0) * 0.7 
-                
+                item_cost = float(detail.unit_price or 0) * 0.7
+                has_estimated_cost = True
+
             total_cost += item_cost * (detail.quantity or 0)
-            
+
     gross_profit = total_sales - total_cost
 
     # --- DATOS PARA GRÁFICO (Agrupado por día) ---
@@ -104,15 +112,21 @@ def get_sales_summary(
     prev_txn_count = len(prev_sales)
     prev_ticket = prev_total_sales / prev_txn_count if prev_txn_count > 0 else 0
     
-    # Calcular Costo Anterior para Utilidad
+    # Calcular Costo Anterior para Utilidad (misma jerarquía: serie → average_cost → 70%)
     prev_total_cost = 0
     for ps in prev_sales:
         for d in ps.details:
             c = 0
             if d.series_id:
                 s = db.query(ProductSeries).filter(ProductSeries.series_id == d.series_id).first()
-                if s and s.cost: c = float(s.cost)
-            if c == 0: c = float(d.unit_price or 0) * 0.7
+                if s and s.cost:
+                    c = float(s.cost)
+            if c == 0 and d.product_id:
+                p = db.query(Product).filter(Product.product_id == d.product_id).first()
+                if p and p.average_cost and float(p.average_cost) > 0:
+                    c = float(p.average_cost)
+            if c == 0:
+                c = float(d.unit_price or 0) * 0.7
             prev_total_cost += c * (d.quantity or 0)
     prev_gross_profit = prev_total_sales - prev_total_cost
 
@@ -131,6 +145,7 @@ def get_sales_summary(
         "gross_profit": gross_profit,
         "average_ticket": total_sales / transaction_count if transaction_count > 0 else 0,
         "chart_data": chart_data,
+        "has_estimated_cost": has_estimated_cost,  # True si algún producto usó estimación del 70%
         "growth": {
             "sales": sales_growth,
             "transactions": txn_growth,

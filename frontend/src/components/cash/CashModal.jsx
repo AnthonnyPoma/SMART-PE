@@ -6,8 +6,7 @@ import {
 import { useCash } from '../../context/CashContext';
 
 // MODOS: 'OPEN', 'CLOSE'
-// MODOS: 'OPEN', 'CLOSE'
-export default function CashModal({ open, mode, onClose }) {
+export default function CashModal({ open, mode, onClose, onSuccess }) {
     const { openCashRegister, closeCashRegister } = useCash();
     const [amount, setAmount] = useState('');
     const [notes, setNotes] = useState('');
@@ -37,7 +36,13 @@ export default function CashModal({ open, mode, onClose }) {
         if (mode === 'OPEN') {
             result = await openCashRegister(amount);
             if (result.success) {
-                onClose();
+                // Llamar onSuccess si existe (permite al padre recargar el status antes de cerrar),
+                // sino caer al onClose clásico
+                if (onSuccess) {
+                    await onSuccess();
+                } else {
+                    onClose();
+                }
             } else {
                 setError(result.message);
             }

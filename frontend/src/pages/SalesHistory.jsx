@@ -60,7 +60,7 @@ function SalesHistory() {
   const [endDate, setEndDate] = useState("");
 
   // Listas de filtro estáticas (solo métodos de pago)
-  const paymentMethodOptions = ['EFECTIVO', 'TARJETA', 'YAPE', 'PLIN', 'TRANSFERENCIA'];
+  const paymentMethodOptions = ['EFECTIVO', 'TARJETA', 'YAPE', 'PLIN', 'TRANSFERENCIA', 'WEB'];
 
   useEffect(() => {
     fetchSales();
@@ -323,6 +323,7 @@ function SalesHistory() {
               <TableRow>
                 <TableCell sx={{ fontWeight: 'bold', color: 'text.primary' }}>ID Venta</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', color: 'text.primary' }}>Fecha</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', color: 'text.primary' }}>Comprobante</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', color: 'text.primary' }}>Cliente</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', color: 'text.primary' }}>Pago</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', color: 'text.primary' }}>Total</TableCell>
@@ -338,6 +339,17 @@ function SalesHistory() {
                   <TableRow key={sale.sale_id} hover>
                     <TableCell sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>#{sale.sale_id.toString().padStart(6, '0')}</TableCell>
                     <TableCell sx={{ fontSize: '0.9rem' }}>{formatDate(sale.date_created)}</TableCell>
+                    <TableCell>
+                      {sale.invoice_series && sale.invoice_number ? (
+                         <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>
+                           {sale.invoice_series}-{sale.invoice_number.toString().replace('WEB-', '').padStart(6, '0')}
+                         </Typography>
+                      ) : sale.payment_method === 'WEB' ? (
+                         <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 'bold' }}>WEB-{sale.sale_id.toString().padStart(6, '0')}</Typography>
+                      ) : (
+                         <Typography variant="body2" color="text.secondary">-</Typography>
+                      )}
+                    </TableCell>
                     <TableCell>{sale.client_name ? toTitleCase(sale.client_name) : (sale.client_dni || "Público General")}</TableCell>
                     <TableCell>
                       <Chip label={sale.payment_method} size="small" variant="outlined" sx={{ color: 'text.primary', borderColor: 'divider' }} />

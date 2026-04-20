@@ -54,5 +54,7 @@ def emit_electronic_receipt(sale_id: int, db: Session = Depends(get_db), current
             return {"status": "error", "message": result.get("error")}
 
     except Exception as e:
-        print(f"Error facturación: {e}")
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error facturación: {e}")
         raise HTTPException(status_code=500, detail=str(e))

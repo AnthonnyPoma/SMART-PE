@@ -28,8 +28,22 @@ export const CashProvider = ({ children }) => {
             checkCashStatus();
         } else {
             setCashStatus(null);
+            setLoading(false);
         }
     }, [isAuthenticated]);
+
+    // Re-verificar caja al recuperar el foco de la ventana (tab switch, regreso de otra app)
+    // Esto evita que el estado local quede desactualizado si la caja se abrió/cerró en otra pestaña
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible' && isAuthenticated) {
+                checkCashStatus();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [isAuthenticated]);
+
 
     const openCashRegister = async (amount) => {
         try {

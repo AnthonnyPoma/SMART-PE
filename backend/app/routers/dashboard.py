@@ -109,7 +109,10 @@ def get_dashboard_stats(
     top_products_query = db.query(Product.name, func.sum(SaleDetail.quantity).label('qty'))\
         .join(SaleDetail, SaleDetail.product_id == Product.product_id)\
         .join(Sale, Sale.sale_id == SaleDetail.sale_id)\
-        .filter(Sale.store_id == effective_store_id)\
+        .filter(
+            Sale.store_id == effective_store_id,
+            func.date(Sale.date_created) >= start_date_chart
+        )\
         .group_by(Product.name).order_by(desc('qty')).limit(5).all()
     
     top_products = [{"name": t[0], "value": t[1]} for t in top_products_query]

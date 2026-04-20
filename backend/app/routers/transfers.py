@@ -48,7 +48,7 @@ def create_transfer_request(
     db.flush()
 
     for item in transfer_data.items:
-        print(f"🔍 DEBUG ITEM: product_id={item.product_id}, series_id={item.series_id}, serial_number={item.serial_number}, quantity={item.quantity}")
+
         
         # Validar producto
         product = db.query(Product).filter(Product.product_id == item.product_id).first()
@@ -66,15 +66,15 @@ def create_transfer_request(
             ).first()
             if series:
                 series_id_to_save = series.series_id
-                print(f"✅ Encontrado series_id={series_id_to_save} para serial_number={item.serial_number}")
+
             else:
-                print(f"❌ NO encontrado serial_number={item.serial_number} para product_id={item.product_id}")
+
                 raise HTTPException(
                     status_code=404, 
                     detail=f"IMEI {item.serial_number} no encontrado para producto {item.product_id}"
                 )
 
-        print(f"💾 Guardando: series_id_to_save={series_id_to_save}")
+
         
         # Guardar detalle
         det = TransferDetail(

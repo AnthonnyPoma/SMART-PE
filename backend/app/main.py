@@ -25,21 +25,17 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 if SENTRY_DSN:
     sentry_sdk.init(
         dsn=SENTRY_DSN,
-        # En desarrollo muestreamos todo; en producción reducimos para no capturar datos sensibles
         traces_sample_rate=0.1 if ENVIRONMENT == "production" else 1.0,
-        profiles_sample_rate=0.0,   # Desactivar profiling (captura stack completo = riesgo)
+        profiles_sample_rate=0.0,  
         environment=ENVIRONMENT,
-        # No enviar variables de entorno al reporte (pueden contener secrets)
         send_default_pii=False,
     )
 
 # ── Configuración de la API ───────────────────────────────────────────────
-# En producción ocultamos /docs y /redoc para no exponer la estructura de la API
 docs_url    = None if ENVIRONMENT == "production" else "/docs"
 redoc_url   = None if ENVIRONMENT == "production" else "/redoc"
 openapi_url = None if ENVIRONMENT == "production" else "/openapi.json"
 
-# Crear las tablas en la base de datos (si no existen)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -51,10 +47,6 @@ app = FastAPI(
 )
 
 # ── CORS ────────────────────────────────────────────────────────────────────────
-# En desarrollo se permite localhost.
-# En producción, leer los dominios reales desde .env (CORS_ORIGINS).
-# Ejemplo .env producción:
-#   CORS_ORIGINS=https://admin.smartpe.com,https://tienda.smartpe.com
 _default_origins = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"
 _raw = os.getenv("CORS_ORIGINS", _default_origins)
 origins = [o.strip() for o in _raw.split(",") if o.strip()]
@@ -67,7 +59,6 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
-# Registrar las rutas
 app.include_router(inventory.router, tags=["Inventario"])
 app.include_router(sales.router, tags=["Ventas (POS)"])
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])

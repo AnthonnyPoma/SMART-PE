@@ -43,6 +43,7 @@ const Checkout = () => {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [orderNumber, setOrderNumber] = useState(null);
+  const [finalTotal, setFinalTotal] = useState(0);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   
@@ -86,12 +87,23 @@ const Checkout = () => {
 
       const resp = await submitCheckout(orderPayload);
       setOrderNumber(`WEB-${resp.web_order_id}`);
+      setFinalTotal(total);
       setSubmitted(true);
       clearCart();
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
       console.error(err);
-      alert("Hubo un error de conexión al emitir tu pedido. Por favor intenta de nuevo.");
+      // Error 409: Stock insuficiente - mostrar detalle
+      if (err?.response?.status === 409 || err?.status === 409) {
+        const detail = err?.response?.data?.detail || err?.data?.detail;
+        const items = detail?.items || [];
+        const msg = items.length
+          ? `❌ Stock insuficiente:\n\n${items.map(i => `• ${i}`).join("\n")}\n\nPor favor ajusta las cantidades en tu carrito.`
+          : "Algunos productos no tienen suficiente stock disponible. Por favor revisa tu carrito.";
+        alert(msg);
+      } else {
+        alert("Hubo un error de conexión al emitir tu pedido. Por favor intenta de nuevo.");
+      }
     } finally {
       setLoading(false);
     }
@@ -118,9 +130,9 @@ const Checkout = () => {
           <span style={{ color: "#64748B", fontSize: 13, fontWeight: 500 }}>Número de Pedido</span>
           <span style={{ fontWeight: 700, color: "#1E3A8A", fontSize: 15 }}>{orderNumber}</span>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between" }}>
           <span style={{ color: "#64748B", fontSize: 13, fontWeight: 500 }}>Total Pagado</span>
-          <span style={{ fontWeight: 800, color: "#0F172A", fontSize: 18 }}>S/ {total.toLocaleString()}</span>
+          <span style={{ fontWeight: 800, color: "#0F172A", fontSize: 18 }}>S/ {finalTotal.toLocaleString()}</span>
         </div>
         <div style={{ display: "flex", justifyContent: "space-between" }}>
           <span style={{ color: "#64748B", fontSize: 13, fontWeight: 500 }}>Método de Pago</span>

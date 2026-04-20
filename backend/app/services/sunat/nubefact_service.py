@@ -154,7 +154,17 @@ def build_nubefact_payload(sale, db: Session) -> dict:
     total_con_igv = float(sale.net_amount or sale.total_amount)
     total_sin_igv = round(total_con_igv / 1.18, 2)
     total_igv     = round(total_con_igv - total_sin_igv, 2)
-    descuento     = float(sale.discount_amount or 0)
+    
+    total_descuento_con_igv = float(sale.discount_amount or 0)
+    # Extra check if discount amount wasn't populated but net_amount differs from total_amount
+    if not total_descuento_con_igv and total_con_igv < float(sale.total_amount):
+        total_descuento_con_igv = float(sale.total_amount) - total_con_igv
+
+    descuento_global_sin_igv = ""
+    total_descuento_payload = ""
+    if total_descuento_con_igv > 0:
+        descuento_global_sin_igv = round(total_descuento_con_igv / 1.18, 2)
+        total_descuento_payload = total_descuento_con_igv
 
     # ── Payload base ──────────────────────────────────────────────────────────
     payload = {
@@ -175,8 +185,8 @@ def build_nubefact_payload(sale, db: Session) -> dict:
         "moneda":                            1,
         "tipo_de_cambio":                    "",
         "porcentaje_de_igv":                 18.00,
-        "descuento_global":                  "",
-        "total_descuento":                   "",
+        "descuento_global":                  descuento_global_sin_igv,
+        "total_descuento":                   total_descuento_payload,
         "total_anticipo":                    "",
         "total_gravada":                     total_sin_igv,
         "total_inafecta":                    "",
@@ -199,9 +209,9 @@ def build_nubefact_payload(sale, db: Session) -> dict:
         "orden_compra_servicio":             "",
         "tabla_personalizada_codigo":        "",
         "formato_de_pdf":                    "",
-        # Identificador único: Incluimos el ID de la venta y la fecha de creación 
-        # para que si se reintenta tras un error de comunicación, NubeFact lo vea como nuevo
-        "codigo_unico":                      f"{sale.sale_id}-{sale.date_created.strftime('%Y%m%d%H%M') if sale.date_created else '0'}", 
+        # Identificador único: sale_id + timestamp con microsegundos para que cada reintento
+        # genere un código diferente y NubeFact no rechace por duplicado
+        "codigo_unico": f"{sale.sale_id}-{sale.date_created.strftime('%Y%m%d%H%M%S') if sale.date_created else '0'}-{__import__('time').time_ns() // 1_000_000}",
         "items":                             items,
     }
 

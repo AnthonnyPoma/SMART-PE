@@ -614,12 +614,12 @@ function POS() {
             </Paper>
 
             <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
-              <Grid container spacing={2}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 2 }}>
                 {filteredProducts.map((prod) => (
-                  <Grid item xs={12} sm={6} md={4} lg={3} key={prod.product_id}>
+                  <Box key={prod.product_id} sx={{ display: 'flex' }}>
                     <Card 
                       sx={{ 
-                        height: '100%', display: 'flex', flexDirection: 'column', 
+                        width: '100%', display: 'flex', flexDirection: 'column', 
                         cursor: 'pointer', transition: '0.2s',
                         bgcolor: 'background.paper',
                         opacity: prod.stock > 0 ? 1 : 0.6,
@@ -643,7 +643,7 @@ function POS() {
 
                       <CardContent sx={{ p: 1.5, flexGrow: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                         <Box>
-                          <Typography variant="subtitle2" fontWeight="bold" noWrap color="text.primary">
+                          <Typography variant="subtitle2" fontWeight="bold" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: 40 }} color="text.primary">
                             {prod.name}
                           </Typography>
                           <Typography variant="caption" color="text.secondary" display="block">
@@ -664,9 +664,9 @@ function POS() {
                         {prod.is_serializable && <Chip label="Requiere IMEI" size="small" color="warning" sx={{ mt: 1, fontSize: '0.65rem', height: 20 }} />}
                       </CardContent>
                     </Card>
-                  </Grid>
+                  </Box>
                 ))}
-              </Grid>
+              </Box>
             </Box>
           </Box>
 

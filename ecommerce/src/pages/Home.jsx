@@ -33,7 +33,14 @@ const HomePage = () => {
   useEffect(() => {
     getCategories().then(setCategories).catch(console.error);
     getProducts({ limit: 12 }).then(setProducts).catch(console.error);
-  }, []);
+    
+    // Auto-play banner every 5 seconds
+    const interval = setInterval(() => {
+      setBannerIdx(prev => (prev + 1) % banners.length);
+    }, 5000);
+    
+    return () => clearInterval(interval);
+  }, [banners.length]);
 
   const onSale = products.slice(0, 4).map(p => ({ ...p, originalPrice: p.base_price * 1.2, tag: "SÚPER PRECIO", rating: 4.5, reviews: 24 }));
   const featured = products.slice(4, 10).map(p => ({ ...p, originalPrice: p.base_price * 1.1, tag: "NUEVO", rating: 4.8, reviews: 56, hot: true }));
@@ -116,7 +123,14 @@ const HomePage = () => {
                     <ProductImageMock product={p} size={150} />
                   </div>
                   <div style={{ padding: 20, flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <span className="tag-badge" style={{ background: "#EFF6FF", color: "#1E3A8A", marginBottom: 12, display: "inline-block", width: 'fit-content', border: '1px solid #BFDBFE' }}>{p.tag}</span>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+                      <span className="tag-badge" style={{ background: "#EFF6FF", color: "#1E3A8A", border: '1px solid #BFDBFE' }}>{p.tag}</span>
+                      {Number(p.stock) <= 0 ? (
+                        <span className="tag-badge" style={{ background: "#FEF2F2", color: "#991B1B", border: '1px solid #FECACA' }}>AGOTADO</span>
+                      ) : Number(p.stock) <= 5 && (
+                        <span className="tag-badge" style={{ background: "#FFFBEB", color: "#92400E", border: '1px solid #FEF3C7' }}>¡POCAS UNIDADES!</span>
+                      )}
+                    </div>
                     <p style={{ fontSize: 14, fontWeight: 600, color: "#0F172A", lineHeight: 1.4, flex: 1, marginBottom: 16 }}>{p.name}</p>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 16 }}>
                       <span style={{ fontSize: 20, fontWeight: 700, color: "#1E3A8A", letterSpacing: '-0.5px' }}>S/ {parseFloat(p.base_price).toLocaleString()}</span>
@@ -147,10 +161,15 @@ const HomePage = () => {
                   </div>
                   <div style={{ padding: "0 20px 20px", flex: 1, display: "flex", flexDirection: "column" }}>
                     <div style={{ width: '100%', height: 1, background: '#F1F5F9', marginBottom: 16 }}></div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
                       <Stars rating={p.rating} />
                       <span style={{ fontSize: 12, color: "#94A3B8", fontWeight: 600 }}>({p.reviews})</span>
-                      {p.hot && <span className="tag-badge" style={{ background: "#F1F5F9", color: "#475569", marginLeft: "auto", border: '1px solid #E2E8F0' }}>TOP</span>}
+                      {p.hot && <span className="tag-badge" style={{ background: "#F1F5F9", color: "#475569", border: '1px solid #E2E8F0' }}>TOP</span>}
+                      {Number(p.stock) <= 0 ? (
+                        <span className="tag-badge" style={{ background: "#FEF2F2", color: "#991B1B", border: '1px solid #FECACA', fontSize: 10 }}>AGOTADO</span>
+                      ) : Number(p.stock) <= 3 && (
+                        <span className="tag-badge" style={{ background: "#FFFBEB", color: "#92400E", border: '1px solid #FEF3C7', fontSize: 10 }}>QUEDAN {p.stock}</span>
+                      )}
                     </div>
                     <p style={{ fontSize: 14, fontWeight: 600, color: "#0F172A", lineHeight: 1.4, flex: 1, marginBottom: 16 }}>{p.name}</p>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 16 }}>

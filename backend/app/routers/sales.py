@@ -384,10 +384,13 @@ def get_sales_history_paginated(
             "total_amount": float(sale.total_amount),
             "payment_method": sale.payments[0].method if sale.payments else "Desconocido", 
             "client_dni": sale.client.document_number if sale.client else None, 
+            "client_name": sale.client.first_name if sale.client else None, 
             "user_name": sale.user.username if sale.user else "Admin",
             "details": details_data,
             "sunat_status": sale.sunat_status,
             "invoice_type": sale.invoice_type,
+            "invoice_series": sale.invoice_series,
+            "invoice_number": sale.invoice_number,
             "xml_url": sale.xml_url
         })
     
