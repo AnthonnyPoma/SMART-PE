@@ -523,29 +523,16 @@ function POS() {
       const response = await axios.post(`${API_URL}/sales/checkout`, salePayload, config);
       const saleData = response.data;
 
-      // Abrir ticket (siempre, incluso si hay error SUNAT — el ticket interno siempre es útil)
-      window.open(`${API_URL}/sales/${saleData.sale_id}/ticket`, '_blank');
-
-      // Informar resultado al cajero
-      if (saleData.sunat_status === 'ACEPTADO' && saleData.invoice_series) {
-        const tipoLabel = saleData.invoice_type === 'FACTURA' ? 'FACTURA' : 'BOLETA';
-        alert(`✅ VENTA EXITOSA\n${tipoLabel}: ${saleData.invoice_series}-${saleData.invoice_number}`);
-      } else if (saleData.sunat_status === 'ERROR_SUNAT') {
-        alert(`✅ Venta registrada #${saleData.sale_id}\n⚠️ SUNAT no respondió. El comprobante quedó pendiente.\nPuedes reintentarlo desde el Historial de Ventas.`);
-      } else {
-        alert(`✅ VENTA EXITOSA #${saleData.sale_id}`);
-      }
-
-      // Reset
-      setCart([]); 
-      setTotal(0); 
+      // ── Reset SIEMPRE tras respuesta exitosa del backend (200) ──────────────
+      // Esto evita que el cajero haga doble clic y cree ventas duplicadas,
+      // incluso si hay ERROR_SUNAT (la venta ya fue registrada en BD).
+      setCart([]);
+      setTotal(0);
       setNetTotal(0);
-      setClientDni(''); 
+      setClientDni('');
       setClientName('');
       setClientId(null);
       setClientPoints(0);
-      
-      // Reset Descuento y Puntos
       setDiscountType('PERCENTAGE');
       setDiscountValue('');
       setDiscountAmount(0);
@@ -555,12 +542,26 @@ function POS() {
       setPointsMoney(0);
       setCouponCode('');
       setAppliedCouponId(null);
-      
       setPaymentDialogOpen(false);
       setPaymentReference('');
       setAmountReceived('');
-      
-      fetchProducts(); 
+      fetchProducts();
+
+      // Abrir ticket (siempre — el ticket interno es independiente de SUNAT)
+      window.open(`${API_URL}/sales/${saleData.sale_id}/ticket`, '_blank');
+
+      // Informar resultado al cajero
+      if (saleData.sunat_status === 'ACEPTADO' && saleData.invoice_series) {
+        const tipoLabel = saleData.invoice_type === 'FACTURA' ? 'FACTURA' : 'BOLETA';
+        const numPadded = String(saleData.invoice_number || '').padStart(8, '0');
+        alert(`✅ VENTA EXITOSA\n${tipoLabel}: ${saleData.invoice_series}-${numPadded}`);
+      } else if (saleData.sunat_status === 'ERROR_SUNAT') {
+        alert(`✅ Venta #${saleData.sale_id} REGISTRADA\n\n⚠️ El comprobante SUNAT no pudo emitirse.\nVe al Historial de Ventas → botón ☁️ para reintentar.\nNO vuelvas a confirmar la venta.`);
+      } else {
+        alert(`✅ VENTA EXITOSA #${saleData.sale_id}`);
+      }
+
+
 
     } catch (error) {
       console.error(error);

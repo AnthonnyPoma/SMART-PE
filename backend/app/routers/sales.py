@@ -692,7 +692,12 @@ def generate_ticket_pdf(sale_id: int, db: Session = Depends(get_db)):
     y -= 4 * mm
     
     serie = sale.invoice_series or "B001"
-    numero = sale.invoice_number or f"{sale.sale_id:08d}"
+    numero_raw = sale.invoice_number or f"{sale.sale_id:08d}"
+    # Formatear a 8 dígitos para que coincida con el PDF de NubeFact (BBB1-000005)
+    try:
+        numero = f"{int(numero_raw):08d}"
+    except (ValueError, TypeError):
+        numero = numero_raw
     
     c.setFont("Helvetica", 10)
     c.drawCentredString(width / 2, y, f"{serie}-{numero}")
@@ -703,7 +708,11 @@ def generate_ticket_pdf(sale_id: int, db: Session = Depends(get_db)):
         related = db.query(Sale).filter(Sale.sale_id == sale.related_sale_id).first()
         if related:
             ref_serie = related.invoice_series or "B001"
-            ref_num = related.invoice_number or f"{related.sale_id:08d}"
+            ref_raw = related.invoice_number or f"{related.sale_id:08d}"
+            try:
+                ref_num = f"{int(ref_raw):08d}"
+            except (ValueError, TypeError):
+                ref_num = ref_raw
             
             c.setFont("Helvetica", 7)
             c.drawCentredString(width / 2, y, f"Ref: {ref_serie}-{ref_num}")

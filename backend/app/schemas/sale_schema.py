@@ -36,7 +36,13 @@ class SaleCreate(BaseModel):
 class SaleResponse(BaseModel):
     sale_id: int
     total_amount: float
+    net_amount: Optional[float] = None
     status: str
+    # Datos SUNAT (disponibles tras emisión síncrona)
+    sunat_status: Optional[str] = None
+    invoice_type: Optional[str] = None
+    invoice_series: Optional[str] = None
+    invoice_number: Optional[str] = None
 
 # --- HISTORIAL (Para la pantalla de reportes) ---
 class SaleDetailHistory(BaseModel):
