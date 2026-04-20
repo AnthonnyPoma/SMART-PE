@@ -243,9 +243,8 @@ def process_sale(sale_data: SaleCreate, db: Session = Depends(get_db), current_u
     db.refresh(new_sale)
 
     # 🚀 Emitir a SUNAT de forma SÍNCRONA
-    # El checkout espera la respuesta de NubeFact antes de responder al frontend.
-    # Así el ticket impreso siempre lleva el número real de comprobante.
     from app.services.sunat.nubefact_service import emit_to_nubefact
+    sunat_error_msg = ""
     try:
         result = emit_to_nubefact(new_sale, db)
         if result.get("success"):
@@ -255,13 +254,18 @@ def process_sale(sale_data: SaleCreate, db: Session = Depends(get_db), current_u
             new_sale.hash_cpe       = result.get("hash_cpe", "")
             new_sale.xml_url        = result.get("enlace_pdf", "")
         else:
+            sunat_error_msg = result.get("error_msg", "Error desconocido")
             new_sale.sunat_status = "ERROR_SUNAT"
-            logger.error(f"🚨 NubeFact rechazó Venta #{new_sale.sale_id}: {result.get('error_msg')}")
+            # Guardar el error en hash_cpe temporalmente para diagnóstico
+            new_sale.hash_cpe = str(sunat_error_msg)[:255]
+            logger.error(f"🚨 NubeFact rechazó Venta #{new_sale.sale_id}: {sunat_error_msg}")
         db.commit()
         db.refresh(new_sale)
     except Exception as e:
+        sunat_error_msg = str(e)
         logger.error(f"❌ Error crítico emitiendo Venta #{new_sale.sale_id}: {e}")
         new_sale.sunat_status = "ERROR_SUNAT"
+        new_sale.hash_cpe = sunat_error_msg[:255]
         db.commit()
 
     return {
@@ -273,6 +277,7 @@ def process_sale(sale_data: SaleCreate, db: Session = Depends(get_db), current_u
         "invoice_type":   new_sale.invoice_type,
         "invoice_series": new_sale.invoice_series or "",
         "invoice_number": new_sale.invoice_number or "",
+        "sunat_error":    sunat_error_msg,
     }
 
 # ==========================================

@@ -43,6 +43,7 @@ class SaleResponse(BaseModel):
     invoice_type: Optional[str] = None
     invoice_series: Optional[str] = None
     invoice_number: Optional[str] = None
+    sunat_error: Optional[str] = None   # Mensaje de error de NubeFact para diagnóstico
 
 # --- HISTORIAL (Para la pantalla de reportes) ---
 class SaleDetailHistory(BaseModel):

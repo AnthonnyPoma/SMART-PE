@@ -560,7 +560,9 @@ function POS() {
         const numPadded = String(saleData.invoice_number || '').padStart(8, '0');
         alert(`✅ VENTA EXITOSA\n${tipoLabel}: ${saleData.invoice_series}-${numPadded}`);
       } else if (saleData.sunat_status === 'ERROR_SUNAT') {
-        alert(`✅ Venta #${saleData.sale_id} REGISTRADA\n\n⚠️ El comprobante SUNAT no pudo emitirse.\nVe al Historial de Ventas → botón ☁️ para reintentar.\nNO vuelvas a confirmar la venta.`);
+        const errorDetail = saleData.sunat_error ? `\n\nError NubeFact: ${saleData.sunat_error}` : '';
+        alert(`✅ Venta #${saleData.sale_id} REGISTRADA\n\n⚠️ El comprobante SUNAT no pudo emitirse.${errorDetail}\n\nVe al Historial de Ventas → botón ☁️ para reintentar.\nNO vuelvas a confirmar la venta.`);
+
       } else {
         alert(`✅ VENTA EXITOSA #${saleData.sale_id}`);
       }
