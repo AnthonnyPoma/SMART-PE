@@ -1,4 +1,5 @@
 import qrcode
+import logging
 from reportlab.lib.utils import ImageReader
 from num2words import num2words
 from fastapi.responses import StreamingResponse
@@ -12,6 +13,8 @@ from sqlalchemy import desc
 from typing import List, Optional
 from datetime import datetime
 from app.services.sunat.emission_service import process_sunat_emission
+
+logger = logging.getLogger(__name__)
 
 # Imports Core
 from app.core.database import get_db
