@@ -521,10 +521,21 @@ function POS() {
       };
       
       const response = await axios.post(`${API_URL}/sales/checkout`, salePayload, config);
+      const saleData = response.data;
 
-      alert(`✅ VENTA EXITOSA`);
-      window.open(`${API_URL}/sales/${response.data.sale_id}/ticket`, '_blank');
-      
+      // Abrir ticket (siempre, incluso si hay error SUNAT — el ticket interno siempre es útil)
+      window.open(`${API_URL}/sales/${saleData.sale_id}/ticket`, '_blank');
+
+      // Informar resultado al cajero
+      if (saleData.sunat_status === 'ACEPTADO' && saleData.invoice_series) {
+        const tipoLabel = saleData.invoice_type === 'FACTURA' ? 'FACTURA' : 'BOLETA';
+        alert(`✅ VENTA EXITOSA\n${tipoLabel}: ${saleData.invoice_series}-${saleData.invoice_number}`);
+      } else if (saleData.sunat_status === 'ERROR_SUNAT') {
+        alert(`✅ Venta registrada #${saleData.sale_id}\n⚠️ SUNAT no respondió. El comprobante quedó pendiente.\nPuedes reintentarlo desde el Historial de Ventas.`);
+      } else {
+        alert(`✅ VENTA EXITOSA #${saleData.sale_id}`);
+      }
+
       // Reset
       setCart([]); 
       setTotal(0); 
@@ -1159,7 +1170,10 @@ function POS() {
               (paymentMethod !== 'Efectivo' && !paymentReference.trim())
             }
           >
-             {loadingSale ? "PROCESANDO..." : "CONFIRMAR PAGO"}
+             {loadingSale 
+               ? <><CircularProgress size={16} sx={{ mr: 1, color: 'inherit' }} /> EMITIENDO A SUNAT...</> 
+               : "CONFIRMAR PAGO"}
+
           </Button>
         </DialogActions>
       </Dialog>

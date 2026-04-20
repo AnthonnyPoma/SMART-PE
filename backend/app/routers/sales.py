@@ -38,7 +38,7 @@ from app.routers.cash import get_active_register
 
 
 @router.post("/sales/checkout", response_model=SaleResponse)
-def process_sale(sale_data: SaleCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def process_sale(sale_data: SaleCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     
     # 0. Validación de Caja Abierta
     # Solo validamos si es CAJERO o ADMIN que vende (aunque Admin debería poder vender siempre, mejor forzar arqueo)
@@ -53,25 +53,31 @@ def process_sale(sale_data: SaleCreate, background_tasks: BackgroundTasks, db: S
     # 2. Buscar Cliente (Si se envió DNI)
     client_obj = None
     if sale_data.client_dni:
-        # ✅ CORRECCIÓN: Usamos document_number
         client_obj = db.query(Client).filter(Client.document_number == sale_data.client_dni).first()
 
-    # 3. Crear Cabecera de Venta
+    # 3. Determinar tipo de comprobante automáticamente
+    # Regla SUNAT: DNI (8 dígitos) → BOLETA | RUC (11 dígitos) → FACTURA
+    invoice_type = "BOLETA"
+    if client_obj and client_obj.document_number:
+        doc_num = (client_obj.document_number or "").strip()
+        if len(doc_num) == 11 and doc_num.isdigit():
+            invoice_type = "FACTURA"
+
+    # 4. Crear Cabecera de Venta
     new_sale = Sale(
         store_id=sale_data.store_id,
         user_id=current_user.user_id,
         client_id=client_obj.client_id if client_obj else None,
-        total_amount=0,  # Se calcula abajo (subtotal antes de descuento)
-        discount_amount=sale_data.discount_amount or 0,  # Descuento aplicado
-        net_amount=0,  # Se calcula abajo (total después de descuento)
-        
-        invoice_type='BOLETA', 
+        total_amount=0,
+        discount_amount=sale_data.discount_amount or 0,
+        net_amount=0,
+        invoice_type=invoice_type,
         sunat_status='PENDIENTE',
         points_earned=0,
         promotion_id=sale_data.promotion_id
     )
     db.add(new_sale)
-    db.flush() # Generamos el ID de venta
+    db.flush()
 
     total_sale = 0
 
@@ -232,11 +238,39 @@ def process_sale(sale_data: SaleCreate, background_tasks: BackgroundTasks, db: S
 
     db.commit()
     db.refresh(new_sale)
-    
-    # 🚀 Enviar a SUNAT en Background
-    background_tasks.add_task(process_sunat_emission, new_sale.sale_id)
 
-    return {"sale_id": new_sale.sale_id, "total_amount": total_sale, "status": "completado"}
+    # 🚀 Emitir a SUNAT de forma SÍNCRONA
+    # El checkout espera la respuesta de NubeFact antes de responder al frontend.
+    # Así el ticket impreso siempre lleva el número real de comprobante.
+    from app.services.sunat.nubefact_service import emit_to_nubefact
+    try:
+        result = emit_to_nubefact(new_sale, db)
+        if result.get("success"):
+            new_sale.sunat_status   = "ACEPTADO"
+            new_sale.invoice_series = result.get("invoice_series", "")
+            new_sale.invoice_number = result.get("invoice_number", str(new_sale.sale_id))
+            new_sale.hash_cpe       = result.get("hash_cpe", "")
+            new_sale.xml_url        = result.get("enlace_pdf", "")
+        else:
+            new_sale.sunat_status = "ERROR_SUNAT"
+            logger.error(f"🚨 NubeFact rechazó Venta #{new_sale.sale_id}: {result.get('error_msg')}")
+        db.commit()
+        db.refresh(new_sale)
+    except Exception as e:
+        logger.error(f"❌ Error crítico emitiendo Venta #{new_sale.sale_id}: {e}")
+        new_sale.sunat_status = "ERROR_SUNAT"
+        db.commit()
+
+    return {
+        "sale_id":        new_sale.sale_id,
+        "total_amount":   float(new_sale.total_amount),
+        "net_amount":     float(new_sale.net_amount),
+        "status":         "completado",
+        "sunat_status":   new_sale.sunat_status,
+        "invoice_type":   new_sale.invoice_type,
+        "invoice_series": new_sale.invoice_series or "",
+        "invoice_number": new_sale.invoice_number or "",
+    }
 
 # ==========================================
 # GESTIÓN DE HISTORIAL DE VENTAS
@@ -407,7 +441,7 @@ def get_sales_history_paginated(
 from app.schemas.sale_schema import VoidSaleRequest
 
 @router.post("/sales/{sale_id}/void")
-def void_sale(sale_id: int, void_data: VoidSaleRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def void_sale(sale_id: int, void_data: VoidSaleRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     # 1. Buscar Venta Original
     original_sale = db.query(Sale).filter(Sale.sale_id == sale_id).first()
     if not original_sale:
@@ -520,11 +554,36 @@ def void_sale(sale_id: int, void_data: VoidSaleRequest, background_tasks: Backgr
 
     db.commit()
     db.refresh(new_nc)
-    
-    # 5. Emitir a SUNAT
-    background_tasks.add_task(process_sunat_emission, new_nc.sale_id)
-    
-    return {"message": "Anulación iniciada", "credit_note_id": new_nc.sale_id, "status": "PENDIENTE"}
+
+    # 5. Emitir Nota de Crédito a SUNAT de forma SÍNCRONA
+    from app.services.sunat.nubefact_service import emit_to_nubefact
+    try:
+        result = emit_to_nubefact(new_nc, db)
+        if result.get("success"):
+            new_nc.sunat_status   = "ACEPTADO"
+            new_nc.invoice_series = result.get("invoice_series", "")
+            new_nc.invoice_number = result.get("invoice_number", str(new_nc.sale_id))
+            new_nc.hash_cpe       = result.get("hash_cpe", "")
+            new_nc.xml_url        = result.get("enlace_pdf", "")
+            # Marcar la venta original como ANULADO
+            original_sale.sunat_status = "ANULADO"
+        else:
+            new_nc.sunat_status = "ERROR_SUNAT"
+            logger.error(f"🚨 NubeFact rechazó NC #{new_nc.sale_id}: {result.get('error_msg')}")
+        db.commit()
+        db.refresh(new_nc)
+    except Exception as e:
+        logger.error(f"❌ Error crítico emitiendo NC #{new_nc.sale_id}: {e}")
+        new_nc.sunat_status = "ERROR_SUNAT"
+        db.commit()
+
+    return {
+        "message":        "Anulación procesada",
+        "credit_note_id": new_nc.sale_id,
+        "sunat_status":   new_nc.sunat_status,
+        "invoice_series": new_nc.invoice_series or "",
+        "invoice_number": new_nc.invoice_number or "",
+    }
 
 
 # ==========================================
