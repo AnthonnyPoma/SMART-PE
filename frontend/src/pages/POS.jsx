@@ -474,11 +474,14 @@ function POS() {
       const config = { headers: { Authorization: `Bearer ${token}` } };
       let finalClientId = clientId;
 
-      // 1. Auto-registro si viene de RENIEC
+      // 1. Auto-registro si viene de RENIEC o ingresado manualmente
       if (!finalClientId && clientDni && clientName) {
          try {
+             // Detectar tipo de documento por longitud: 11 dígitos = RUC, 8 dígitos = DNI
+             const docType = clientDni.length === 11 ? 'RUC' : 'DNI';
              const resClient = await axios.post(`${API_URL}/clients/`, {
                  document_number: clientDni,
+                 document_type: docType,
                  first_name: clientName,
                  last_name: "",
                  address: "Dirección POS",
@@ -489,6 +492,7 @@ function POS() {
              console.error("Error auto-registrando cliente:", err);
          }
       }
+
 
       // 2. Payload de Venta
       const storeId = localStorage.getItem('store_id') || 1;

@@ -106,25 +106,37 @@ def build_nubefact_payload(sale, db: Session) -> dict:
     if sale.client_id:
         client = db.query(Client).filter(Client.client_id == sale.client_id).first()
         if client:
-            doc_type = client.document_type or "DNI"
             doc_num  = (client.document_number or "").strip()
-            
+
+            # Auto-detectar tipo de documento si no está definido o es incorrecto
+            # Regla SUNAT: 8 dígitos = DNI, 11 dígitos = RUC
+            stored_type = client.document_type or ""
+            if stored_type not in ("DNI", "RUC", "CE", "PAS"):
+                if len(doc_num) == 11 and doc_num.isdigit():
+                    stored_type = "RUC"
+                elif len(doc_num) == 8 and doc_num.isdigit():
+                    stored_type = "DNI"
+                else:
+                    stored_type = "DNI"
+            doc_type = stored_type
+
             # Validación estricta anti-rechazos de SUNAT/NubeFact
             is_valid_dni = doc_type == "DNI" and len(doc_num) == 8 and doc_num.isdigit()
             is_valid_ruc = doc_type == "RUC" and len(doc_num) == 11 and doc_num.isdigit()
-            is_valid_ce  = doc_type == "CE" and len(doc_num) >= 8
+            is_valid_ce  = doc_type == "CE"  and len(doc_num) >= 8
             is_valid_pas = doc_type == "PAS" and len(doc_num) >= 6
-            
+
             cli_nombre    = f"{client.first_name} {client.last_name or ''}".strip() or CLIENTE_ANONIMO_NOMBRE
             cli_direccion = client.address or "-"
-            
+
             if is_valid_dni or is_valid_ruc or is_valid_ce or is_valid_pas:
                 cli_tipo_num  = TIPO_DOC_CLIENTE.get(doc_type, "1")
                 cli_doc_num   = doc_num
             else:
-                # Comprador WEB o sin DNI válido -> Documento "0" (Público General/Varios)
+                # Sin documento válido → Público General / Varios
                 cli_tipo_num  = CLIENTE_ANONIMO_DOC_TYPE
                 cli_doc_num   = CLIENTE_ANONIMO_DOC_NUM
+
 
     # ── Ítems ─────────────────────────────────────────────────────────────────
     items = []
