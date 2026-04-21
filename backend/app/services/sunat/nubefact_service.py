@@ -12,8 +12,11 @@ IMPORTANTE - Catálogo NubeFact (DIFERENTE al catálogo SUNAT):
 import os
 import requests
 import logging
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 from sqlalchemy.orm import Session
+
+# Zona horaria de Perú: UTC-5 (no observa horario de verano)
+LIMA_TZ = timezone(timedelta(hours=-5))
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +97,10 @@ def build_nubefact_payload(sale, db: Session) -> dict:
     serie    = _get_serie(invoice_type, settings)
     logger.info(f"📄 Venta #{sale.sale_id}: tipo={invoice_type} | nubefact_code={tipo_num} | serie={serie}")
 
-    # ── Fecha → HOY en formato YYYY-MM-DD (requerido por NubeFact) ────────────
-    fecha_emision = date.today().strftime("%Y-%m-%d")
+    # ── Fecha → HOY en Lima (UTC-5) en formato YYYY-MM-DD ────────────────────
+    # CRÍTICO: Railway corre en UTC. Después de las 19:00 Lima, UTC ya es el día
+    # siguiente. NubeFact rechaza cualquier fecha ≠ hoy (hora Perú).
+    fecha_emision = datetime.now(LIMA_TZ).strftime("%Y-%m-%d")
 
     # ── Datos de cliente ──────────────────────────────────────────────────────
     cli_tipo_num  = CLIENTE_ANONIMO_DOC_TYPE
