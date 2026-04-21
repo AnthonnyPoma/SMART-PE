@@ -31,6 +31,26 @@ import axios from "axios";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+// ─── Validación de documentos peruanos ───────────────────────────────────────
+// Algoritmo oficial SUNAT para dígito verificador de RUC
+function validateRUC(ruc) {
+  if (!/^\d{11}$/.test(ruc)) return false;
+  const factors = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+  const sum = factors.reduce((acc, f, i) => acc + parseInt(ruc[i]) * f, 0);
+  const remainder = sum % 11;
+  const check = remainder < 2 ? remainder : 11 - remainder;
+  // SUNAT: si 11 - remainder == 10 → RUC inválido
+  if (11 - remainder === 10) return false;
+  const checkFinal = remainder === 0 ? 0 : (remainder === 1 ? 1 : 11 - remainder);
+  return parseInt(ruc[10]) === checkFinal;
+}
+
+// DNI: exactamente 8 dígitos numéricos
+function validateDNI(dni) {
+  return /^\d{8}$/.test(dni);
+}
+
+
 function POS() {
   const theme = useTheme();
   const [products, setProducts] = useState([]);
@@ -445,6 +465,31 @@ function POS() {
   // --- Validación Preventiva SUNAT (Checkout) ---
   const handleCheckoutAttempt = (method = 'Efectivo') => {
     if (cart.length === 0) return alert("Carrito vacío");
+
+    // Validación de documento del cliente
+    if (clientDni && clientDni.trim() !== '') {
+      const doc = clientDni.trim();
+      if (doc.length === 11) {
+        // RUC: validar dígito verificador SUNAT
+        if (!validateRUC(doc)) {
+          const factors = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+          const sum = factors.reduce((acc, f, i) => acc + parseInt(doc[i]) * f, 0);
+          const rem = sum % 11;
+          const expected = rem === 0 ? 0 : (rem === 1 ? 1 : 11 - rem);
+          alert(`⚠️ RUC INVÁLIDO\nEl dígito verificador de "${doc}" es incorrecto.\nEl último dígito debería ser: ${expected}\nVerifica el RUC antes de continuar.`);
+          if (clientInputRef.current) clientInputRef.current.focus();
+          return;
+        }
+      } else if (doc.length === 8) {
+        // DNI: solo dígitos
+        if (!validateDNI(doc)) {
+          alert("⚠️ DNI INVÁLIDO\nEl DNI debe contener exactamente 8 dígitos numéricos.");
+          if (clientInputRef.current) clientInputRef.current.focus();
+          return;
+        }
+      }
+    }
+
     if (netTotal > 700 && (!clientDni || clientDni.trim() === '')) {
       alert("⚠️ RECHAZO SUNAT PREVENTIVO:\nPor normativa, toda boleta mayor a S/ 700.00 requiere identificar obligatoriamente al comprador con DNI o RUC. Por favor, asigne un cliente antes de cobrar.");
       if (clientInputRef.current) clientInputRef.current.focus();
@@ -452,6 +497,7 @@ function POS() {
     }
     openPaymentDialog(method);
   };
+
 
   // 💰 PROCESO DE PAGO HÍBRIDO
   const handlePay = async () => {
