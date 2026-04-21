@@ -33,16 +33,23 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // ─── Validación de documentos peruanos ───────────────────────────────────────
 // Algoritmo oficial SUNAT para dígito verificador de RUC
+// Factores: [5,4,3,2,7,6,5,4,3,2] aplicados a los primeros 10 dígitos
+// cd = remainder >= 2 ? (11 - remainder) : remainder
 function validateRUC(ruc) {
   if (!/^\d{11}$/.test(ruc)) return false;
   const factors = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
   const sum = factors.reduce((acc, f, i) => acc + parseInt(ruc[i]) * f, 0);
   const remainder = sum % 11;
-  const check = remainder < 2 ? remainder : 11 - remainder;
-  // SUNAT: si 11 - remainder == 10 → RUC inválido
-  if (11 - remainder === 10) return false;
-  const checkFinal = remainder === 0 ? 0 : (remainder === 1 ? 1 : 11 - remainder);
-  return parseInt(ruc[10]) === checkFinal;
+  const cd = remainder >= 2 ? (11 - remainder) : remainder;
+  return parseInt(ruc[10]) === cd;
+}
+
+// Calcula qué dígito debería tener un RUC (para mostrar en el error)
+function expectedRUCDigit(ruc) {
+  const factors = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
+  const sum = factors.reduce((acc, f, i) => acc + parseInt(ruc[i]) * f, 0);
+  const rem = sum % 11;
+  return rem >= 2 ? (11 - rem) : rem;
 }
 
 // DNI: exactamente 8 dígitos numéricos
@@ -472,14 +479,12 @@ function POS() {
       if (doc.length === 11) {
         // RUC: validar dígito verificador SUNAT
         if (!validateRUC(doc)) {
-          const factors = [5, 4, 3, 2, 7, 6, 5, 4, 3, 2];
-          const sum = factors.reduce((acc, f, i) => acc + parseInt(doc[i]) * f, 0);
-          const rem = sum % 11;
-          const expected = rem === 0 ? 0 : (rem === 1 ? 1 : 11 - rem);
-          alert(`⚠️ RUC INVÁLIDO\nEl dígito verificador de "${doc}" es incorrecto.\nEl último dígito debería ser: ${expected}\nVerifica el RUC antes de continuar.`);
+          const expected = expectedRUCDigit(doc);
+          alert(`⚠️ RUC INVÁLIDO\nEl dígito verificador de "${doc}" es incorrecto.\nEl último dígito debería ser: ${expected}\nVerifica el RUC en: sunat.gob.pe`);
           if (clientInputRef.current) clientInputRef.current.focus();
           return;
         }
+
       } else if (doc.length === 8) {
         // DNI: solo dígitos
         if (!validateDNI(doc)) {
